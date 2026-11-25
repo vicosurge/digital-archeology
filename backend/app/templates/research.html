@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Research — {{ project.name }}{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom:18px">
+  <div>
+    <h1>Research · {{ project.name }}</h1>
+    <div class="muted">From recovered captures to an archive a historian can use.</div>
+  </div>
+  <div class="row" style="gap:8px">
+    <a class="btn ghost" href="/project/{{ project.id }}">← Workflow</a>
+    <a class="btn ghost" href="/project/{{ project.id }}/results">Results</a>
+    <a class="btn ghost" href="/project/{{ project.id }}/card">Archival card</a>
+  </div>
+</div>
+
+{# ---- 1. Scope ---- #}
+<div class="panel">
+  <h2>1 · The period under study</h2>
+  {% if project.scope_reason %}
+    <p>{{ project.scope_reason }}</p>
+    <div class="muted small">Captures {{ project.scope_start|fmt_ts if project.scope_start else 'from the beginning' }}
+      – {{ project.scope_end|fmt_ts if project.scope_end else 'onward' }}. Set with <code>scripts/set_scope.py</code>.</div>
+  {% else %}
+    <p class="muted">No scope window set: the whole capture history is treated as one site.
+      Use <code>scripts/set_scope.py</code> if the domain changed hands.</p>
+  {% endif %}
+</div>
+
+{# ---- 2. Themes over time ---- #}
+<div class="panel">
+  <h2>2 · How the site changed, year by year</h2>
+  {% include "partials/_themes.html" %}
+</div>
+
+{# ---- 3. Links ---- #}
+<div class="panel">
+  <h2>3 · Following the links</h2>
+  <p class="muted small">Extract every link from the captured pages (no AI, no quota) · recover articles, references
+    and documents from the Wayback Machine as they looked when cited (network, no quota) · summarize what was
+    recovered and how it relates to the site (AI, uses quota).</p>
+  <div id="links-status">{% include "partials/_links_status.html" %}</div>
+
+  <h3 style="margin-top:18px">Browse</h3>
+  <div id="links-table" hx-get="/project/{{ project.id }}/_links-table?scope=external&status=recovered"
+       hx-trigger="load" hx-swap="innerHTML"><span class="muted small">Loading…</span></div>
+</div>
+
+{# ---- 4. Close reading ---- #}
+<div class="panel">
+  <h2>4 · Reading the documents closely</h2>
+  <p class="muted small">Step 2 sorts the whole corpus. This step interrogates the articles one at a time, the way
+    a source is read: who writes, who is quoted, who is only written about · where it happens · when the
+    reported events took place, as opposed to when the page was captured · what it asserts and what speech it
+    prints · what form it takes and what it is for. One AI call per document, article pages only.</p>
+  <div id="reading-status">{% include "partials/_reading_status.html" %}</div>
+
+  {% if reading.counts.processed %}
+  <h3 style="margin-top:20px">What the readings add up to</h3>
+  <div id="apparatus" hx-get="/project/{{ project.id }}/_apparatus" hx-trigger="load" hx-swap="innerHTML">
+    <span class="muted small">Counting…</span>
+  </div>
+
+  <h3 style="margin-top:20px">Browse the documents</h3>
+  <div id="readings-table" hx-get="/project/{{ project.id }}/_readings-table" hx-trigger="load" hx-swap="innerHTML">
+    <span class="muted small">Loading…</span>
+  </div>
+  {% endif %}
+</div>
+
+{# ---- 5. Findings ---- #}
+<div class="panel">
+  <div class="row between">
+    <h2>5 · Findings</h2>
+    <button hx-post="/project/{{ project.id }}/build-findings" hx-target="#findings" hx-swap="innerHTML">
+      {% if card and card.findings %}Rebuild findings{% else %}Draft findings{% endif %}
+      <span class="spinner"> — the model is reading the evidence (1–3 min)…</span>
+    </button>
+  </div>
+  <p class="muted small">One AI call. Every claim must cite the pages (P…) and linked material (L…) it rests on;
+    anything it cannot back up is flagged.</p>
+  <div id="findings">{% include "partials/_findings.html" %}</div>
+</div>
+
+{# ---- 5. Export ---- #}
+<div class="panel">
+  <h2>6 · The historian’s archive</h2>
+  <p class="muted small">A zip that opens in any browser with no server: findings, every analyzed page, linked
+    material, people, methodology, CSV/JSON, and the raw captures, packaged as a checksummed BagIt bag.</p>
+  <div id="export">{% include "partials/_export.html" %}</div>
+</div>
+{% endblock %}

@@ -1,0 +1,174 @@
+{% extends "_base.html" %}
+{# Sections 5 onward are optional, so they number themselves. #}
+{% set ns = namespace(step=4) %}
+{% set active = 'methodology' %}
+{% block title %}Methodology{% endblock %}
+{% block content %}
+<h1>How this archive was made</h1>
+
+<h2>1. Choosing what to study <span class="tag">decided by a person</span></h2>
+<p>The domain’s full capture history was retrieved from the Internet Archive’s Wayback Machine. A domain name is
+  not a website: when one expires and is re-registered, later captures belong to someone else entirely.</p>
+{% if project.scope_reason %}<div class="panel">{{ project.scope_reason }}</div>{% endif %}
+<p>Studied period: captures from {{ project.scope_start|fmt_ts if project.scope_start else 'the first capture' }}
+  up to {{ project.scope_end|fmt_ts if project.scope_end else 'the last capture' }}.
+  {{ counts.in_scope }} captures are in that period{% if counts.excluded %}; {{ counts.excluded }} later captures were
+  kept as evidence of the takeover but excluded from everything below{% endif %}.</p>
+
+<h2>2. Reading every page <span class="tag">done by AI</span></h2>
+<p>Each page’s text was sent to a large language model, which returned a summary, the people named, topics,
+  tags, a content type, an estimated publication date, and a tone (sentiment) judgement.
+  {{ counts.pages_analyzed }} pages were analyzed. When a URL had several captures, one was analyzed and its result
+  applied to the others. Models used: {{ models|join(', ') }}.</p>
+
+<h2>3. Following the links <span class="tag">automated, no AI</span></h2>
+<p>Every link on every captured page was extracted — {{ counts.citations }} citations in total — and sorted by rules
+  into navigation, tag pages, social-media buttons and newsletter sign-ups (set aside), and articles, references
+  and documents (followed). Each followed link was requested from the Wayback Machine at the capture closest to
+  the date the site first linked to it, so that material is seen as the site’s readers would have seen it.</p>
+<table class="kv">
+  {% for k in counts.link_kinds|sort(attribute='count', reverse=True) %}
+  <tr><td>{{ k.scope }} · {{ k.kind }}</td><td>{{ k.count }}</td></tr>
+  {% endfor %}
+</table>
+<p>{{ counts.links_recovered }} linked pages were recovered; {{ counts.links_not_archived }} had never been captured by
+  the Archive and are likely lost. Among those are {{ counts.articles_lost }} of the site's own articles
+  ({{ counts.articles_lost_pct }}% of the {{ counts.articles_linked }} it linked to), which is a measure of how much
+  of this site did not survive.</p>
+
+<h2>4. Reading the linked material <span class="tag">done by AI</span></h2>
+<p>Recovered pages were summarized the same way, and the model was also shown where and how {{ project.domain }}
+  linked to each one, so it could describe the relationship: a source the site cited, a collaborator, an event it
+  promoted, and so on. {{ counts.links_analyzed }} linked pages were analyzed.</p>
+
+{% if readings %}
+{% set ns.step = ns.step + 1 %}<h2>{{ ns.step }}. Reading the documents closely <span class="tag">done by AI</span></h2>
+<p>Steps 2 and 4 sort a corpus. They do not interrogate it. The {{ readings|length }} article-shaped pages were
+  read again, one at a time, and asked the questions put to any historical source: who wrote it, whom it
+  quotes, whom it only writes about, where its events take place, when those events happened, what it asserts,
+  what speech it prints, what form it takes and what it is for. Index pages, tag listings and pagination were
+  left out — they have no author, no place and no claim, and reading them would have added noise and cost.</p>
+<p>The model was asked only to describe what the page says and how it says it. It was never asked whether a
+  claim is true. Verification is the historian's work, and the assertions the pages make are listed on the
+  <a href="chronology.html">chronology</a> page precisely so it can be done.</p>
+
+<h3>Where the questions come from</h3>
+<p>The backbone is the ordinary critical method: <i>heurística</i> — finding the sources — then external
+  criticism, then internal criticism, then synthesis. Steps 1 and 3 are heuristics: deciding which period is
+  the subject and recovering what can be recovered. External criticism is what the capture record supplies:
+  provenance, dates, and the plain fact of what did not survive. This step is internal criticism, and the
+  questions it asks are borrowed deliberately:</p>
+<ul>
+  <li><b>From sociology</b> — the roles. A person in a text is not simply "mentioned"; they are given a byline,
+    or quoted, or written about. Recording which lets the archive show who a publication treated as a source
+    and who it treated as a topic. That distribution is a property of the outlet, and it is not one an outlet
+    describes about itself. The <a href="reading.html">close reading</a> page reports it directly.</li>
+  <li><b>From literary study</b> — genre and voice. <i>Nota informativa</i>, <i>crónica</i>, <i>reportaje</i>,
+    <i>columna</i>, <i>reseña</i> are different acts, not different topics, and a publication that shifts
+    between them has changed what it is for. Quoted speech is recorded separately from paraphrase for the same
+    reason: who is allowed to speak in their own words is a formal choice.</li>
+  <li><b>From hermeneutics</b> — framing. Beyond what a piece is about lies the description under which it puts
+    its subject. Those construals are recorded in the source's own wording rather than translated into
+    categories, so the archive preserves the terms of the discourse instead of replacing them.</li>
+  <li><b>From the discipline's own quarrel with digital sources</b> — the two clocks. A web archive supplies
+    exactly one date: when a crawler saw the page. Treating that as the date of the events described is the
+    standard error. Every reading was asked separately for when the piece was published and for the period it
+    discusses, and those are recorded as different fields.</li>
+</ul>
+
+<h3>How the counting was done</h3>
+<ul>
+  <li>Names were folded for accents and case, then a shorter name was merged into a longer one only when every
+    word of it appears in that longer name and exactly one longer name qualifies. Ambiguity was left alone:
+    two people who share a surname stay two people. Nicknames and handles were never merged with full names.</li>
+  <li>A person appearing on a quarter or more of all documents is treated as part of the page furniture —
+    a sidebar or staff box — rather than as coverage, and is listed separately as the masthead.</li>
+  <li>Where a URL was captured several times, one capture was read and the result attached to its duplicates.
+    Every figure on these pages counts the originals only.</li>
+</ul>
+{% endif %}
+
+{% if comments %}
+{% set ns.step = ns.step + 1 %}<h2>{{ ns.step }}. Recovering the audience <span class="tag">automated, no AI</span></h2>
+<p>Reader comments are part of the captured page, and they are normally lost twice over: stripped as
+  boilerplate, or absorbed into the article so that a reader arguing in a thread is counted as someone the
+  piece is about. They were instead read straight out of the markup, which is regular enough to parse exactly
+  — an <code>ol.commentlist</code> of numbered items, each with an author, a relative timestamp and a body,
+  and a flag on the ones the site posted itself. No model was involved, so nothing here is an estimate.</p>
+<p>Two details matter for reading the figures. Comments accumulate after publication while the article text
+  does not, so they were taken from the <i>last</i> surviving capture of each page rather than the capture
+  that was close-read, and deduplicated on the comment number the site assigned. And the timestamps are
+  relative — "8 days ago" — so they were converted using the capture date; months are treated as 30 days, and
+  the original wording is kept beside the derived date in <code>comments.csv</code> so the arithmetic can be
+  checked or redone.</p>
+<p>The site's own replies are identified both by the flag in the markup and by the account name, because the
+  flag is not applied consistently: of {{ apparatus.reception.site_comments }} replies from the publication,
+  only some carried it. Getting that wrong would have counted the editors among their own readers.</p>
+{% endif %}
+
+{% if cross_check %}
+{% set X = cross_check %}
+{% set W = X.wayback_recheck %}
+{% set ns.step = ns.step + 1 %}<h2>{{ ns.step }}. Testing the loss figure <span class="tag">automated, no AI</span></h2>
+<p>Everything above measures loss against a single archive, so “never captured” has so far meant “not in the
+  Internet Archive”. That is a weaker claim than it sounds, and the headline figure rests on it. It was
+  attacked from two directions on {{ X.generated_at[:10] }}.</p>
+<p>First, for false negatives. The recovery run happened while the Archive’s index was intermittently
+  unavailable, so an article could have been recorded as lost because a query failed. Rather than re-ask for
+  each address, the domain’s entire capture index was pulled and the lost set checked against it offline —
+  every one of the {{ X.articles_marked_lost }} articles re-tested, not a sample.
+  <b>{{ W.lost_but_actually_have_200 }}</b> proved to be recoverable.
+  {{ W.lost_with_no_capture_at_all }} have no record in the Archive of any kind;
+  {{ W.lost_captured_but_never_200 }} {{ 'was' if W.lost_captured_but_never_200 == 1 else 'were' }} visited
+  only after the domain changed hands, and answered with an error.</p>
+<p>Second, for a second chance. Common Crawl is an independent crawl with its own frontier, so it is
+  corroboration where it overlaps and a genuine recovery where it does not. Its indexes were queried across
+  {{ X.common_crawl.collections_queried }} crawls spanning the period. It holds
+  {{ X.common_crawl.distinct_urls }} addresses from this domain against the Archive’s thousands — a sampled
+  crawl is not an archive, and it should not be mistaken for one — but among them
+  {% if X.recovered_elsewhere %}<b>{{ X.recovered_elsewhere|length }}</b> article{{ 's' if X.recovered_elsewhere|length != 1 }}
+  the Archive never held:</p>
+<ul>
+  {% for r in X.recovered_elsewhere %}
+  <li><i>{{ r.title or r.url }}</i> — linked from {{ r.cited_by_pages }} pages, crawled
+    {{ r.captured[:4] }}-{{ r.captured[4:6] }}-{{ r.captured[6:8] }}, recovered in full from
+    {{ r.collection }}.</li>
+  {% endfor %}
+</ul>
+<p>One article out of {{ X.articles_marked_lost }} is not a rescue, and it does not move the figure. It does
+  settle the methodological question: the loss reported here is real and not an artefact of asking one
+  archive, and checking a second one is worth the afternoon it costs.</p>
+{% else %}nothing the Archive lacks.</p>{% endif %}
+<p>Two other archives were tried and could not be reached — archive.today refused the connection from this
+  network, and the Memento aggregator that once federated this query across some twenty archives has been
+  retired. Both are recorded in <code>cross-check.json</code> rather than passed over, because “we did not
+  check” and “we checked and it was unavailable” are different claims, and only the second one is honest
+  here. The full report, including the exact crawl and byte range each recovered page came from, is in that
+  file; the script that produced it ships with the program.</p>
+{% endif %}
+
+{% set ns.step = ns.step + 1 %}<h2>{{ ns.step }}. Drafting findings <span class="tag">AI draft, for a person to verify</span></h2>
+<p>The model was given the year-by-year aggregates and a sample of page and link summaries, each with an
+  identifier, and asked to write findings in which every claim cites those identifiers. Citations that do not
+  match the evidence it was shown were removed; claims left without evidence are flagged as unverified.</p>
+
+<h2>Limits</h2>
+<ul>
+  <li>The Wayback Machine did not capture everything. Absence from this archive is not evidence something did not exist.</li>
+  <li>A capture shows a page on the day it was crawled, which may differ from when it was written or linked.</li>
+  <li>AI summaries, names and tone judgements contain errors. They are finding aids that point to the evidence;
+    they are not the evidence. Always read the capture before relying on a claim.</li>
+  <li>Tone (sentiment) reflects the model’s reading of each page as a whole, including quoted material and news of
+    events the site reported on, not necessarily the authors’ own views.</li>
+  {% if readings %}
+  <li>Roles, places and dates were assigned by a model reading one page at a time. It has no knowledge of the
+    region beyond the page in front of it, so an unfamiliar local name may be typed wrongly, and a person
+    quoted in one piece and merely named in another is counted once for each.</li>
+  <li>An absent comment thread is not proof of silence: a page captured early shows the comments it had that
+    day, and a page never captured after publication shows none at all.</li>
+  <li>The counts describe what survived to be read. Sixty per cent of the site’s own articles were never
+    captured, so any distribution here — of people, places or forms — is a distribution over the remainder,
+    not over what was published.</li>
+  {% endif %}
+</ul>
+{% endblock %}

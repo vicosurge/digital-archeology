@@ -1,0 +1,41 @@
+{# Failed and skipped files, with the model's reply for analysis failures. #}
+<div class="card" style="margin-top:16px">
+  <div class="row between">
+    <h2 style="margin:0">Failed &amp; skipped files</h2>
+    <button class="ghost" onclick="document.getElementById('file-issues').innerHTML=''">Close</button>
+  </div>
+  {% for group in groups %}
+    <h3 style="margin-bottom:4px">{{ group.label }} <span class="muted small">({{ group.rows|length }})</span></h3>
+    <div class="muted small" style="margin-bottom:6px">{{ group.note }}</div>
+    {% for reason, rows in group.by_reason %}
+      <details style="margin-bottom:6px">
+        <summary><b>{{ rows|length }}</b> × {{ reason or 'no reason recorded' }}</summary>
+        {% for r in rows %}
+          <div class="result">
+            <div class="row between">
+              <a href="{{ r.wayback_url or ('https://web.archive.org/web/*/' ~ r.original_url) }}" target="_blank">{{ r.original_url|truncate_url(90) }}</a>
+              {% if r.local_path %}· <a class="small" href="{{ local_href(r.project_id, r.timestamp, r.original_url) }}" target="_blank" title="Read the downloaded copy here, without the Wayback Machine">local copy</a>{% endif %}
+              <span class="muted small">{{ r.timestamp|fmt_ts }}{% if r.status_code %} · archive HTTP {{ r.status_code }}{% endif %}</span>
+            </div>
+            {% for img in images.get(r.id, []) %}
+              <div class="small" style="margin:4px 0 0 12px">
+                🖼 <a href="{{ img.wayback_url or ('https://web.archive.org/web/*/' ~ img.src_url) }}" target="_blank">{{ img.src_url|truncate_url(70) }}</a>
+                {% if img.local_path %}· <a class="small" href="{{ local_href(img.project_id, img.wayback_timestamp, img.src_url) }}" target="_blank" title="Read the downloaded copy here, without the Wayback Machine">local copy</a>{% endif %}
+                <span class="muted">· {{ img.recovery_status|replace('_', ' ') }}{% if img.error_message %} ({{ img.error_message }}){% endif %}</span>
+                {% if img.description %}<div>{{ img.description }}</div>{% endif %}
+                {% if img.visible_text %}<div class="muted">Text in image: “{{ img.visible_text }}”</div>{% endif %}
+              </div>
+            {% endfor %}
+            {% if r.last_raw_response %}
+              <details><summary class="muted small">Model reply ({{ r.last_raw_response|length }} chars)</summary>
+                <pre style="white-space:pre-wrap;max-height:300px;overflow:auto">{{ r.last_raw_response }}</pre>
+              </details>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </details>
+    {% endfor %}
+  {% else %}
+    <div class="muted">No failed or skipped files.</div>
+  {% endfor %}
+</div>

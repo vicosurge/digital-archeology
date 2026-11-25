@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Data (runtime: downloaded archives & sqlite db)
+# Anchored so the vendored fingerprint DB under backend/app/data/ stays tracked.
+/data/
+/backend/data/
+/backend/app/data/projects/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# Database
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Talk slides live in their own (private) repository
+/presentations/

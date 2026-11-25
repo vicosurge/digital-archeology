@@ -1,0 +1,144 @@
+{% extends "_base.html" %}
+{% import "_macros.html" as m %}
+{% set active = 'index' %}
+{% block title %}Findings{% endblock %}
+{% block content %}
+{% set f = findings %}
+<h1>What this archive shows</h1>
+
+{% if project.scope_reason %}
+<div class="panel"><b>Why this period.</b> {{ project.scope_reason }}</div>
+{% endif %}
+
+{% if f and f.overview %}
+  <h2>Overview</h2>
+  {{ m.claim(f.overview, f) }}
+  {% if f.purpose_and_audience %}<h3>Purpose and audience</h3>{{ m.claim(f.purpose_and_audience, f) }}{% endif %}
+
+  {% if f.goals_and_outcome %}
+  <h3>Did it achieve its goals?
+    <span class="tag">{{ f.goals_and_outcome.assessment|replace('_', ' ') }}</span></h3>
+  {{ m.claim(f.goals_and_outcome, f) }}
+  {% endif %}
+
+  {% if f.evolution %}
+  <h2>How it changed</h2>
+  {% for e in f.evolution %}
+    <h3>{{ e.period }}</h3>{{ m.claim(e, f) }}
+  {% endfor %}
+  {% endif %}
+
+  {% if f.network %}<h2>Its network</h2>{{ m.claim(f.network, f) }}{% endif %}
+
+  {% if f.people %}
+  <h2>People</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Name</th><th>Apparent role</th><th>Evidence</th></tr>
+    {% for p in f.people %}
+    <tr class="{{ 'unsupported' if p.unsupported }}"><td>{{ p.name }}</td><td>{{ p.role }}</td><td>{{ m.cites(p.evidence, f) }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+
+  {% if f.decline %}<h2>How it wound down</h2>{{ m.claim(f.decline, f) }}{% endif %}
+
+  {% if f.open_questions %}
+  <h2>Open questions for the historian</h2>
+  <ul>{% for q in f.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>
+  {% endif %}
+  <p class="muted small ui">Findings drafted by {{ card.findings_model }} from {{ f.evidence_shown.pages }} page
+    summaries and {{ f.evidence_shown.links }} linked-page summaries. Each citation opens the evidence it refers to.</p>
+{% elif card and card.llm_summary %}
+  <h2>Summary</h2><p>{{ card.llm_summary }}</p>
+{% else %}
+  <p class="muted">No findings were generated before this export.</p>
+{% endif %}
+
+<h2>Year by year</h2>
+{% if shift and shift.delta %}
+<p>The largest change in tone came between <b>{{ shift.from }}</b> and <b>{{ shift.to }}</b>
+  (average sentiment {{ '%+.2f'|format(shift.delta) }}). Sentiment is the AI’s judgement of each page’s tone,
+  from −1 (very negative) to +1 (very positive).</p>
+{% endif %}
+<div class="table-wrap"><table>
+  <tr><th>Year</th><th>Pages</th><th>Avg. tone</th><th>+ / − / neutral / mixed</th><th>Main topics</th><th>People first named</th><th>Sites linked most</th></tr>
+  {% for y in themes.years %}
+  <tr>
+    <td><a href="pages.html#y{{ y.year }}">{{ y.year }}</a></td>
+    <td>{{ y.pages }}</td>
+    <td>{{ m.sentiment(None if y.avg_sentiment is none else ('positive' if y.avg_sentiment > 0.05 else 'negative' if y.avg_sentiment < -0.05 else 'neutral'), y.avg_sentiment) }}</td>
+    <td class="small">{{ y.sentiment.positive }} / {{ y.sentiment.negative }} / {{ y.sentiment.neutral }} / {{ y.sentiment.mixed }}</td>
+    <td>{% for s, n in y.subjects[:6] %}<span class="tag">{{ s }}</span>{% endfor %}</td>
+    <td class="small">{{ y.new_people[:6]|join(', ') }}</td>
+    <td class="small">{% for d, n in y.cited_domains[:4] %}{{ d }}{{ ', ' if not loop.last }}{% endfor %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+<h2>What is in this archive</h2>
+<table class="kv">
+  <tr><td>Captures in the studied period</td><td>{{ counts.in_scope }}</td></tr>
+  {% if counts.excluded %}<tr><td>Captures excluded (outside the period)</td><td>{{ counts.excluded }}</td></tr>{% endif %}
+  <tr><td>Pages analyzed</td><td>{{ counts.pages_analyzed }}</td></tr>
+  <tr><td>Citations extracted from those pages</td><td>{{ counts.citations }}</td></tr>
+  <tr><td>Linked pages recovered from the Wayback Machine</td><td>{{ counts.links_recovered }}</td></tr>
+  <tr><td>Linked pages the Archive never captured</td><td>{{ counts.links_not_archived }}</td></tr>
+  <tr><td>Linked pages analyzed</td><td>{{ counts.links_analyzed }}</td></tr>
+</table>
+
+{% if counts.articles_linked %}
+<h2>What did not survive</h2>
+<p>The site's pages linked to <b>{{ counts.articles_linked }}</b> of its own articles.
+  <b>{{ counts.articles_held }}</b> of them exist in this archive; <b>{{ counts.articles_lost }}</b>
+  ({{ counts.articles_lost_pct }}%) were never captured by the Internet Archive and appear to be lost —
+  known only by their address and the words the site used to link to them, listed under
+  <a href="links.html#internal">linked material</a>.
+  Of the outside sources the site cited, {{ counts.refs_recovered }} were recovered and {{ counts.refs_lost }} were not.</p>
+<p class="muted small">A crawler visiting a site usually saves the front page and the section listings far more
+  often than individual articles, so what survives is skewed toward whatever was on the homepage on the days
+  the crawler came.</p>
+{% endif %}
+
+{% if coverage and coverage.months_span %}
+<h2>Why this was recovered from public sources alone</h2>
+<p>Nothing in this archive came from anyone who worked on {{ project.domain }}. No private backup was
+  consulted, no participant was asked for their files, and no material was accepted that a stranger could not
+  obtain today. That restriction was chosen, not forced, and it is the point of the exercise: the question is
+  not whether this site can be reconstructed by someone with access to the people who made it, but what the
+  public record preserves on its own, for the far larger number of projects where no one kept anything and
+  no one is left to ask.</p>
+
+<p>A backup and a preserved archive are not the same object. A backup exists so that its owner can restore
+  their own system; it is private, it assumes the owner is present to use it, and it dies with them, or with
+  the disk, or with the last piece of software able to read its format. Preservation exists so that someone
+  else — later, unknown, unable to ask anyone anything — can still read the material and have grounds to
+  trust it. That is why this archive records where every file came from, when it was captured, what was
+  looked for and not found, and a checksum for every byte. Those are not conveniences. They are what
+  separates evidence from a copy.</p>
+
+<p>The measurement that makes the case is here in the numbers. The Internet Archive was not inattentive to
+  this site: it captured something in <b>{{ coverage.months_seen }} of the
+  {{ coverage.months_span }} months</b> the studied period spans{% if coverage.missing_months %} —
+  only {{ coverage.missing_months|length }} month{{ 's' if coverage.missing_months|length != 1 }}
+  ({{ coverage.missing_months|map('fmt_month')|join(', ') }}) went unvisited{% endif %}. It called nearly every
+  month for years. And still <b>{{ counts.articles_lost_pct }}% of the articles the site linked to were never
+  captured at all</b>.</p>
+
+<p>Presence is not coverage. A crawler saves what is on the front page the day it arrives; everything
+  published and superseded between visits falls through, and on a working publication that is most of what
+  gets published. Passive capture — the best the open web does by default, and the thing most people mean
+  when they assume "it's on the Internet Archive" — loses the majority of a small site while appearing to
+  watch it continuously. Anything more than that has to be done deliberately, by someone who decided to.</p>
+
+<p>Digital and physical archives differ in what they are made of, not in what they are for. A box of papers
+  and a directory of captures are both evidence: incomplete, shaped by what somebody chose to keep, and
+  readable only through the record of how they came to be held. The habits that make a physical archive
+  usable — provenance, fixity, an honest account of the gaps — are the same habits a digital one needs, and
+  they are not automatic. This archive tries to observe them, and states plainly where it could not.</p>
+{% endif %}
+
+<h2>How to cite</h2>
+<p>Cite the Wayback Machine capture, not this archive’s copy: every page and link here carries its
+  <i>web.archive.org/web/&lt;timestamp&gt;/&lt;url&gt;</i> address. The raw files in <code>captures/</code> are
+  byte-for-byte what the Archive served; <code>manifest-sha256.txt</code> lets you verify them.</p>
+{% endblock %}

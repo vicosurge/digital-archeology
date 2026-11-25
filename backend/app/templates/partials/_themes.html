@@ -1,0 +1,29 @@
+{% if not themes.years %}
+  <div class="muted">No analyzed pages yet.</div>
+{% else %}
+  {% if shift and shift.delta %}
+  <div class="notice info" style="margin-bottom:10px">
+    Largest change in tone: <b>{{ shift.from }} → {{ shift.to }}</b>, average sentiment {{ '%+.2f'|format(shift.delta) }}.
+    <span class="muted small">Check a sample of pages from both years before reading much into it: a change in
+      what the site covered shifts tone as much as a change in voice.</span>
+  </div>
+  {% endif %}
+  {% set maxp = themes.years|map(attribute='pages')|max %}
+  <div style="overflow-x:auto">
+  <table class="summary" style="width:100%">
+    <tr class="muted small"><td>Year</td><td>Pages</td><td>Avg. tone</td><td>+ / −</td><td>Topics</td><td>New people</td><td>Linked most</td></tr>
+    {% for y in themes.years %}
+    <tr>
+      <td class="k"><a href="/project/{{ project.id }}/results">{{ y.year }}</a></td>
+      <td style="min-width:90px">{{ y.pages }}
+        <div class="progress" style="height:6px;margin:3px 0"><span style="width:{{ (100 * y.pages / maxp)|round }}%"></span></div></td>
+      <td>{% if y.avg_sentiment is not none %}<b style="color:{{ 'var(--accent-2)' if y.avg_sentiment > 0.05 else 'var(--danger)' if y.avg_sentiment < -0.05 else 'inherit' }}">{{ '%+.2f'|format(y.avg_sentiment) }}</b>{% endif %}</td>
+      <td class="small">{{ y.sentiment.positive }} / {{ y.sentiment.negative }}</td>
+      <td><div class="chips">{% for s, n in y.subjects[:6] %}<span class="chip" title="{{ n }} pages">{{ s }}</span>{% endfor %}</div></td>
+      <td class="small">{{ y.new_people[:5]|join(', ') }}</td>
+      <td class="small">{% for d, n in y.cited_domains[:4] %}{{ d }}{{ ', ' if not loop.last }}{% endfor %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+{% endif %}

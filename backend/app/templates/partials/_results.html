@@ -1,0 +1,70 @@
+{% set f = filters %}
+{# Scope toggle. Only shown once an era has actually been excluded -- on a
+   project covering a single site there is nothing to switch between. #}
+{% if scope_counts.excluded %}
+<div class="row" style="gap:6px; margin-bottom:10px; align-items:center">
+  <span class="muted small">Showing:</span>
+  {% for key, label in [('site', 'The site'), ('excluded', 'After takeover'), ('all', 'All captures')] %}
+  <span class="chip {% if scope == key %}active{% endif %}"
+        hx-get="/project/{{ project_id }}/_results?scope={{ key }}"
+        hx-target="#results" hx-swap="innerHTML"
+        >{{ label }} ({{ scope_counts[key] }})</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if f.q or f.sentiment or f.content_type or f.person or f.tag %}
+<div class="row" style="gap:6px; margin-bottom:10px">
+  <span class="muted small">Filters:</span>
+  {% if f.q %}<span class="badge">“{{ f.q }}”</span>{% endif %}
+  {% if f.sentiment %}<span class="badge">{{ f.sentiment }}</span>{% endif %}
+  {% if f.content_type %}<span class="badge">{{ f.content_type }}</span>{% endif %}
+  {% if f.person %}<span class="badge">person: {{ f.person }}</span>{% endif %}
+  {% if f.tag %}<span class="badge">tag: {{ f.tag }}</span>{% endif %}
+  <span class="chip" hx-get="/project/{{ project_id }}/_results?scope={{ scope }}" hx-target="#results" hx-swap="innerHTML">clear ✕</span>
+</div>
+{% endif %}
+
+<div class="muted small" style="margin-bottom:8px">{{ total }} result{{ '' if total == 1 else 's' }}</div>
+
+{% if not files %}
+  <div class="muted">No matching results.</div>
+{% else %}
+  {% for file in files %}
+  {% set a = file.analysis %}
+  <div class="result">
+    <div class="row between">
+      <span><a href="{{ file.wayback_url }}" target="_blank">{{ file.original_url|truncate_url(80) }}</a>
+        {% if file.local_path %}· <a class="small" href="{{ local_href(project_id, file.timestamp, file.original_url) }}" target="_blank" title="Read the downloaded copy here, without the Wayback Machine">local copy</a>{% endif %}</span>
+      <span class="muted small">
+        {# Captures of a URL that was analyzed once; the summary is shared. #}
+        {% if a.source_file_id %}<span class="badge dup"
+           title="Another capture of this URL was analyzed; this one reuses that summary."
+           >duplicate capture</span>{% endif %}
+        {{ file.timestamp|fmt_ts }}
+      </span>
+    </div>
+    <div style="margin:6px 0">{{ a.description or '' }}</div>
+    <div class="kv">
+      {% if a.sentiment %}<span class="badge">{{ a.sentiment }}</span>{% endif %}
+      {% if a.content_type %}<span class="badge">{{ a.content_type }}</span>{% endif %}
+      {% if a.estimated_date %}<b>date:</b> {{ a.estimated_date }} &nbsp;{% endif %}
+      {% set _people = a.people_mentioned|person_names %}
+      {% if _people %}<b>people:</b> {{ _people|join(', ') }} &nbsp;{% endif %}
+      {% if a.tags %}<b>tags:</b> {{ a.tags|join(', ') }}{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if pages > 1 %}
+  <div class="row between" style="margin-top:14px">
+    <button class="secondary" {% if page <= 1 %}disabled{% endif %}
+      hx-get="/project/{{ project_id }}/_results?scope={{ scope }}&page={{ page - 1 }}&q={{ f.q }}&sentiment={{ f.sentiment }}&content_type={{ f.content_type }}&person={{ f.person }}&tag={{ f.tag }}"
+      hx-target="#results" hx-swap="innerHTML">← Prev</button>
+    <span class="muted small">Page {{ page }} / {{ pages }}</span>
+    <button class="secondary" {% if page >= pages %}disabled{% endif %}
+      hx-get="/project/{{ project_id }}/_results?scope={{ scope }}&page={{ page + 1 }}&q={{ f.q }}&sentiment={{ f.sentiment }}&content_type={{ f.content_type }}&person={{ f.person }}&tag={{ f.tag }}"
+      hx-target="#results" hx-swap="innerHTML">Next →</button>
+  </div>
+  {% endif %}
+{% endif %}

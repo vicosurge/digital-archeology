@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row between" style="margin-bottom:18px">
+  <div>
+    <h1>Projects</h1>
+    <div class="muted">Each project recovers and analyzes one domain's history.</div>
+  </div>
+  <button onclick="document.getElementById('new-project').showModal()">+ New project</button>
+</div>
+
+<dialog id="new-project" class="panel" style="width:min(420px,92vw)">
+  <h2>New project</h2>
+  <form hx-post="/web/projects" hx-swap="none">
+    <div class="field">
+      <label>Project name</label>
+      <input name="name" required placeholder="Poison the Mind forum" style="width:100%">
+    </div>
+    <div class="field">
+      <label>Domain</label>
+      <input name="domain" required placeholder="poisonthemind.com" style="width:100%">
+    </div>
+    <div class="field">
+      <label>Ollama model</label>
+      <select name="ollama_model" style="width:100%">
+        {% if models %}
+          {% for m in models %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+        {% else %}
+          <option value="llama3.2:3b">llama3.2:3b</option>
+        {% endif %}
+      </select>
+    </div>
+    <div class="row between">
+      <button type="button" class="secondary" onclick="document.getElementById('new-project').close()">Cancel</button>
+      <button type="submit">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="project-grid">
+  {% include "partials/_project_grid.html" %}
+</div>
+{% endblock %}

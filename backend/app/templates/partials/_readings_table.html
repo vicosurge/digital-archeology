@@ -1,0 +1,70 @@
+{% set f = filters %}
+{% set base = '/project/' ~ project_id ~ '/_readings-table' %}
+<form class="row" style="gap:8px;align-items:end;margin-bottom:10px" hx-get="{{ base }}" hx-target="#readings-table" hx-swap="innerHTML" hx-trigger="change, submit">
+  <div class="field"><label class="small">Form</label>
+    <select name="genre"><option value="">Any</option>{% for g in genres %}<option {{ 'selected' if f.genre == g }}>{{ g }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="small">Register</label>
+    <select name="intent"><option value="">Any</option>{% for i in intents %}<option {{ 'selected' if f.intent == i }}>{{ i }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="small">Posture</label>
+    <select name="stance"><option value="">Any</option>{% for s in stances %}<option {{ 'selected' if f.stance == s }}>{{ s }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="small">Search</label><input name="q" value="{{ f.q }}" placeholder="title, person, place, text"></div>
+  <button class="secondary">Filter</button>
+</form>
+<div class="muted small" style="margin-bottom:6px">{{ total }} document{{ 's' if total != 1 }}</div>
+
+{% for r in rows %}
+<div class="result">
+  <div class="row between">
+    <a href="https://web.archive.org/web/{{ r.timestamp }}/{{ r.original_url }}" target="_blank">
+      <b>{{ r.title or (r.original_url|truncate_url(80)) }}</b></a>
+    · <a class="small" href="{{ local_href(project_id, r.timestamp, r.original_url) }}" target="_blank" title="Read the downloaded copy here, without the Wayback Machine">local copy</a>
+    <span class="muted small">captured {{ r.timestamp|fmt_ts }}</span>
+  </div>
+  <div class="muted small">
+    <span class="badge">{{ (r.genre or '')|replace('_',' ') }}</span>
+    <span class="badge">{{ r.intent }}</span>
+    <span class="badge">{{ r.stance }}</span>
+    {% if r.published_estimate %} · published {{ r.published_estimate }}{% endif %}
+    {% if r.period_start %} · covers {{ r.period_start }}{% if r.period_end and r.period_end != r.period_start %}–{{ r.period_end }}{% endif %}{% endif %}
+    {% if r.temporal_mode %} · {{ r.temporal_mode|replace('_',' ') }}{% endif %}
+  </div>
+  <div>{{ r.summary }}</div>
+
+  {% set authors = r.people|selectattr('role','equalto','author')|list %}
+  {% set quoted = r.people|selectattr('role','equalto','quoted')|list %}
+  {% set subjects = r.people|selectattr('role','equalto','subject')|list %}
+  <div class="small" style="margin-top:6px">
+    {% if authors %}<div><b>By</b> {% for p in authors %}{{ p.name }}{% if p.affiliation %} <span class="muted">({{ p.affiliation }})</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+    {% if quoted %}<div><b>Quoted</b> <span class="muted">{% for p in quoted %}{{ p.name }}{{ ', ' if not loop.last }}{% endfor %}</span></div>{% endif %}
+    {% if subjects %}<div><b>About</b> <span class="muted">{% for p in subjects %}{{ p.name }}{{ ', ' if not loop.last }}{% endfor %}</span></div>{% endif %}
+    {% if r.places %}<div><b>Places</b> <span class="muted">{% for p in r.places %}{{ p.name }}{{ ', ' if not loop.last }}{% endfor %}</span></div>{% endif %}
+  </div>
+
+  {% if r.events or r.facts or r.quotes or r.frames %}
+  <details style="margin-top:6px"><summary class="muted small">Events, facts and quotations</summary>
+    {% if r.events %}
+    <div class="small" style="margin-top:6px"><b>Events</b>
+      <ul>{% for e in r.events %}<li>{% if e.when %}<span class="muted">{{ e.when }}</span> — {% endif %}{{ e.what }}{% if e.where %} <span class="muted">({{ e.where }})</span>{% endif %}</li>{% endfor %}</ul>
+    </div>{% endif %}
+    {% if r.facts %}
+    <div class="small"><b>Asserted</b><ul>{% for fact in r.facts %}<li>{{ fact }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if r.quotes %}
+    <div class="small"><b>Printed speech</b>
+      <ul>{% for q in r.quotes %}<li><i>“{{ q.text }}”</i> — {{ q.speaker }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if r.frames %}
+    <div class="small"><b>Framed as</b> <span class="muted">{{ r.frames|join(' · ') }}</span></div>{% endif %}
+  </details>
+  {% endif %}
+</div>
+{% else %}
+<div class="muted">Nothing matches.</div>
+{% endfor %}
+
+{% if pages > 1 %}
+{% set qs = 'genre=' ~ f.genre ~ '&intent=' ~ f.intent ~ '&stance=' ~ f.stance ~ '&q=' ~ (f.q|urlencode) %}
+<div class="row" style="gap:6px;margin-top:8px">
+  {% if page > 1 %}<button class="secondary" hx-get="{{ base }}?{{ qs }}&page={{ page - 1 }}" hx-target="#readings-table">← Prev</button>{% endif %}
+  <span class="muted small">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<button class="secondary" hx-get="{{ base }}?{{ qs }}&page={{ page + 1 }}" hx-target="#readings-table">Next →</button>{% endif %}
+</div>
+{% endif %}

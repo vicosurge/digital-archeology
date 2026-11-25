@@ -1,0 +1,227 @@
+{# Self-contained workflow fragment. Re-polls itself every 2s while a job runs. #}
+<div id="workflow"
+     {% if active %}hx-get="/project/{{ project.id }}/_workflow"
+     hx-trigger="every {{ poll_interval | default('2s') }}"
+     hx-swap="outerHTML"{% endif %}>
+
+  {% set s = project.status.value %}
+  {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+  {% if info %}<div class="notice info">{{ info }}</div>{% endif %}
+
+  <div class="steps">
+
+    {# Step 1: Search Wayback #}
+    <div class="step {% if project.total_snapshots %}done{% elif s == 'created' %}current{% endif %}">
+      <h3>1 · Search the Wayback Machine</h3>
+      {% if project.total_snapshots %}
+        <div class="kv"><b>{{ project.total_snapshots }}</b> snapshots ·
+          {{ project.date_range_start|fmt_ts }} → {{ project.date_range_end|fmt_ts }}</div>
+      {% else %}
+        <div class="muted small">Query the CDX API for available captures of this domain.</div>
+      {% endif %}
+      <div style="margin-top:8px">
+        <button hx-post="/project/{{ project.id }}/search-wayback"
+                hx-target="#workflow" hx-swap="outerHTML" {% if active %}disabled{% endif %}>
+          {% if project.total_snapshots %}Re-search{% else %}Search Wayback{% endif %}
+          <span class="spinner"> …</span>
+        </button>
+      </div>
+    </div>
+
+    {# Step 2: Configure filters #}
+    <div class="step {% if project.files_total %}done{% elif project.total_snapshots %}current{% else %}todo{% endif %}">
+      <h3>2 · Configure &amp; queue files</h3>
+      {% if project.total_snapshots %}
+      <form hx-post="/project/{{ project.id }}/configure-filters"
+            hx-target="#workflow" hx-swap="outerHTML"
+            hx-disabled-elt="find button[type=submit]">
+        <div class="row">
+          {# hx-preserve + ids: the fragment re-polls while a job runs, and
+             without them every poll wiped what was being typed. #}
+          {% set ds, de = project.filter_date_start or '', project.filter_date_end or '' %}
+          <div class="field"><label>From (date)</label>
+            <input type="date" name="date_start" id="f-date-start" hx-preserve
+                   value="{{ ds[:4] ~ '-' ~ ds[4:6] ~ '-' ~ ds[6:8] if ds|length >= 8 else '' }}"></div>
+          <div class="field"><label>To (date)</label>
+            <input type="date" name="date_end" id="f-date-end" hx-preserve
+                   value="{{ de[:4] ~ '-' ~ de[4:6] ~ '-' ~ de[6:8] if de|length >= 8 else '' }}"></div>
+          {% set fq = project.filter_frequency or 'monthly' %}
+          <div class="field"><label>Frequency</label>
+            <select name="frequency" id="f-frequency" hx-preserve>
+              {% for v, label in [('all','All captures'),('daily','One per day'),('weekly','One per week'),('monthly','One per month'),('yearly','One per year')] %}
+              <option value="{{ v }}" {% if v == fq %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Content types <span class="muted small">(none ticked = every type)</span></label>
+          {% set chosen = project.filter_mimetypes if project.filter_mimetypes is not none else ['text/html'] %}
+          <div class="chips">
+            {% for mt in mimetypes %}
+            <label class="chip"><input type="checkbox" name="mimetypes" value="{{ mt }}"
+              id="f-mt-{{ loop.index }}" hx-preserve
+              {% if mt in chosen %}checked{% endif %}> {{ mt }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <button type="submit" {% if active %}disabled{% endif %}>
+          {% if project.files_total %}Update queue{% else %}Queue files{% endif %}</button>
+        <span class="spinner muted small">&nbsp;Asking the Wayback Machine for the capture list… this can take a minute on large sites.</span>
+        {% if active %}<span class="muted small">&nbsp;Available once the running download or analysis stops.</span>
+        {% elif project.files_total %}<span class="muted small">&nbsp;Adds what the new filters select; downloaded and analyzed captures are kept.</span>{% endif %}
+        {% if project.files_total %}<span class="muted small">&nbsp;{{ project.files_total }} queued</span>{% endif %}
+      </form>
+
+      <details style="margin-top:10px" {% if project.exclude_patterns %}open{% endif %}>
+        <summary class="small"><b>Exclusion list</b>
+          {% if project.exclude_patterns %}<span class="muted">· {{ exclusion_count }} pattern{{ 's' if exclusion_count != 1 }}</span>{% endif %}</summary>
+        <form hx-post="/project/{{ project.id }}/exclusions" hx-target="#workflow" hx-swap="outerHTML"
+              style="margin-top:6px">
+          <div class="muted small">One URL pattern per line, matched against the path: <code>/wp-admin/</code> covers
+            the whole folder, <code>*.css</code> any stylesheet. Matching captures are not downloaded and not
+            analyzed. Nothing is deleted, and removing a pattern brings its captures back.</div>
+          <textarea name="exclude_patterns" id="f-exclusions" hx-preserve rows="8" style="width:100%; font-family:monospace"
+                    placeholder="/wp-admin/">{{ project.exclude_patterns or '' }}</textarea>
+          <div class="row" style="gap:8px">
+            <button type="submit" {% if active %}disabled{% endif %}>Save &amp; apply</button>
+            <button type="button" class="ghost"
+                    onclick="var t=this.form.exclude_patterns; var add=this.dataset.list.split('\n').filter(function(l){return l && t.value.split('\n').indexOf(l)<0}); t.value=(t.value.trim()? t.value.trim()+'\n' : '')+add.join('\n');"
+                    data-list="{{ suggested_exclusions }}">Add suggested (CMS admin, feeds, CSS/JS…)</button>
+          </div>
+        </form>
+      </details>
+      {% else %}
+      <div class="muted small">Search the Wayback Machine first.</div>
+      {% endif %}
+    </div>
+
+    {# Step 3: Download #}
+    <div class="step {% if project.files_downloaded and project.files_downloaded >= project.files_total %}done{% elif project.files_total %}current{% else %}todo{% endif %}">
+      <h3>3 · Download archived files</h3>
+      {% if project.files_total %}
+        {% set pct = (100 * project.files_downloaded / project.files_total) if project.files_total else 0 %}
+        <div class="progress"><span style="width:{{ pct }}%"></span></div>
+        <div class="kv"><b>{{ project.files_downloaded }}</b> / {{ project.files_total }} downloaded
+          {% if download.errors %}· <span style="color:var(--danger)">{{ download.errors }} errors</span>{% endif %}
+          {% if archive_error_pages %}· <span class="muted" title="The Wayback Machine itself recorded these captures as HTTP errors (robots.txt, favicons, missing images…) or as redirects to pages it never captured, so there was nothing to fetch. Lost at crawl time, not here.">{{ archive_error_pages }} not in the archive</span>{% endif %}</div>
+        {% if s == 'downloading' and download.current_file %}
+          <div class="muted small">↓ {{ download.current_file|truncate_url(80) }}</div>{% endif %}
+        <div style="margin-top:8px" class="row" style="gap:8px">
+          {% if s == 'downloading' %}
+            <button class="danger" hx-post="/project/{{ project.id }}/stop-download"
+                    hx-target="#workflow" hx-swap="outerHTML">Stop</button>
+          {% elif project.files_downloaded >= project.files_total %}
+            <span class="muted small">All files downloaded.</span>
+          {% else %}
+            <button hx-post="/project/{{ project.id }}/start-download"
+                    hx-target="#workflow" hx-swap="outerHTML">
+              {% if not download.pending and download.errors %}Retry {{ download.errors }} failed download{{ 's' if download.errors != 1 }}
+              {% elif project.files_downloaded %}Resume download{% else %}Start download{% endif %}</button>
+            {% if download.errors and download.pending %}<span class="muted small">Also retries the {{ download.errors }} that failed.</span>{% endif %}
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="muted small">Queue files first.</div>
+      {% endif %}
+    </div>
+
+    {# Step 4: Process with LLM #}
+    {#
+      The denominator is the analyzable set (distinct URLs still needing a call,
+      plus what is already processed), NOT files_downloaded. Duplicate captures
+      and non-text files are resolved without an LLM call, so counting them as
+      pending would leave the bar permanently short of 100%.
+    #}
+    {% set done = processing.processed or 0 %}
+    {% set total = processing.analyzable_total or 0 %}
+    <div class="step {% if total and done >= total %}done{% elif project.files_downloaded %}current{% else %}todo{% endif %}">
+      <h3>4 · Analyze with the LLM</h3>
+      {% if project.files_downloaded %}
+        {% set ppct = (100 * done / total) if total else 0 %}
+        <div class="progress proc"><span style="width:{{ ppct }}%"></span></div>
+        <div class="kv"><b>{{ done }}</b> / {{ total }} pages analyzed
+          {% if processing.errors %}· <span style="color:var(--danger)">{{ processing.errors }} errors</span>{% endif %}</div>
+        {% if scope_excluded %}
+        <div class="muted small">
+          {{ scope_excluded }} captures fall outside this project's scope{% if project.exclude_patterns %} or match the exclusion list{% endif %} and are not analyzed.
+          <a href="/project/{{ project.id }}/results?scope=excluded">View them →</a>
+        </div>
+        {% endif %}
+
+        <div class="muted small">
+          {% if processing.copied %}{{ processing.copied }} duplicate captures copied · {% endif %}
+          {% if processing.skipped %}{{ processing.skipped }} skipped · {% endif %}
+          {{ processing.remaining_urls or 0 }} pages remaining
+          {% if processing.rate_per_min %}· {{ processing.rate_per_min }}/min{% endif %}
+          {% if processing.eta_seconds %}· ≈{{ (processing.eta_seconds // 60) }} min left{% endif %}
+          {% if processing.model %}· {{ processing.model }}{% endif %}
+          {% if processing.concurrency %}· {{ processing.concurrency }} workers{% endif %}
+        </div>
+
+        {% if processing.running and processing.current_file %}
+          <div class="muted small">⚙ {{ processing.current_file|truncate_url(80) }}</div>{% endif %}
+        {% if processing.paused_on_budget %}
+          <div class="notice info">{{ processing.budget_note }}</div>
+        {% elif processing.stale %}
+          <div class="notice info">Interrupted at {{ processing.analyzed or 0 }} analyzed — resume below.</div>
+        {% endif %}
+        {% if processing.last_error %}
+          <div class="notice error">{{ processing.last_error }}</div>
+        {% endif %}
+
+        <div class="row" style="margin-top:8px; gap:8px; align-items:center">
+          {% if processing.running %}
+            <button class="danger" hx-post="/project/{{ project.id }}/stop-processing"
+                    hx-target="#workflow" hx-swap="outerHTML">Stop</button>
+            <span class="muted small">Finishing in-flight pages…</span>
+          {% else %}
+            <form hx-post="/project/{{ project.id }}/start-processing"
+                  hx-target="#workflow" hx-swap="outerHTML"
+                  class="row" style="gap:8px; align-items:center; margin:0">
+              <label class="muted small">Workers
+                <input type="number" name="concurrency" min="1" max="32"
+                       value="{{ processing.concurrency or 4 }}" style="width:64px">
+              </label>
+              <label class="muted small">Model
+                <select name="model">
+                  {% if project.ollama_model and project.ollama_model not in models %}
+                    <option value="{{ project.ollama_model }}" selected>{{ project.ollama_model }}</option>
+                  {% endif %}
+                  {% for m in models %}
+                    <option value="{{ m }}" {% if m == project.ollama_model %}selected{% endif %}>{{ m }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <button type="submit" title="Model: {{ project.ollama_model }}">
+                {% if processing.stale %}Resume analysis
+                {% elif done %}Continue analysis
+                {% else %}Start analysis{% endif %}</button>
+            </form>
+            {% if processing.errors %}
+              <button class="ghost" hx-post="/project/{{ project.id }}/retry-failed-processing"
+                      hx-target="#workflow" hx-swap="outerHTML">
+                Retry {{ processing.errors }} failed</button>
+            {% endif %}
+            <button class="ghost" hx-get="/project/{{ project.id }}/_file-issues"
+                    hx-target="#file-issues" hx-swap="innerHTML">Show failed &amp; skipped</button>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="muted small">Download files first.</div>
+      {% endif %}
+    </div>
+
+    {# Step 5: Results & card #}
+    <div class="step {% if project.files_processed %}current{% else %}todo{% endif %}">
+      <h3>5 · Explore &amp; build the archival card</h3>
+      <div class="row" style="gap:8px">
+        <a class="btn ghost" href="/project/{{ project.id }}/results">Browse results</a>
+        <a class="btn" href="/project/{{ project.id }}/card">Archival card</a>
+        <a class="btn ghost" href="/api/export/{{ project.id }}/json" target="_blank">Export JSON</a>
+        <a class="btn ghost" href="/api/export/{{ project.id }}/csv" target="_blank">Export CSV</a>
+      </div>
+    </div>
+
+  </div>
+</div>

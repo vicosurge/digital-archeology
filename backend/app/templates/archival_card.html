@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Archival card — {{ project.name }}{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom:18px">
+  <div>
+    <h1>Archival card</h1>
+    <div class="muted">{{ project.name }} · {{ project.domain }}</div>
+  </div>
+  <div class="row" style="gap:8px">
+    <a class="btn ghost" href="/project/{{ project.id }}">← Workflow</a>
+    <a class="btn ghost" href="/project/{{ project.id }}/results">Results</a>
+    <a class="btn" href="/project/{{ project.id }}/research">Research →</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="row between">
+    <div class="muted small">
+      {% if card %}Last generated: {{ card.generated_at.strftime('%Y-%m-%d %H:%M') if card.generated_at }}{% else %}Not generated yet.{% endif %}
+    </div>
+    <button hx-post="/project/{{ project.id }}/build-card"
+            hx-target="#card" hx-swap="innerHTML">
+      {% if card %}Rebuild card{% else %}Build card{% endif %}
+      <span class="spinner"> — gathering RDAP, tech stack &amp; LLM summary…</span>
+    </button>
+  </div>
+</div>
+
+<div id="card">
+  {% include "partials/_card.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Results — {{ project.name }}{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom:18px">
+  <div>
+    <h1>Results · {{ project.name }}</h1>
+    <div class="muted">
+      {{ stats.processed }} analyzed pages
+      {%- if scope == 'excluded' %} from outside the studied period
+      {%- elif scope == 'all' %} across all captures{% endif %}
+    </div>
+  </div>
+  <div class="row" style="gap:8px">
+    <a class="btn ghost" href="/project/{{ project.id }}">← Workflow</a>
+    <a class="btn ghost" href="/project/{{ project.id }}/card">Archival card</a>
+    <a class="btn" href="/project/{{ project.id }}/research">Research →</a>
+  </div>
+</div>
+
+{% if project.scope_reason %}
+<div class="notice info" style="margin-bottom:14px">
+  <b>Scope:</b> {{ project.scope_reason }}
+  {% if project.scope_start or project.scope_end %}
+  <span class="muted small">
+    (captures {{ project.scope_start|fmt_ts if project.scope_start else 'from the beginning' }}
+    – {{ project.scope_end|fmt_ts if project.scope_end else 'onward' }})
+  </span>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>Overview</h2>
+  <div class="row">
+    <div style="flex:1; min-width:200px">
+      <div class="kv">Sentiment</div>
+      {% for k, v in stats.sentiments.items() %}<span class="badge">{{ k }}: {{ v }}</span> {% endfor %}
+    </div>
+    <div style="flex:1; min-width:200px">
+      <div class="kv">Content types</div>
+      {% for k, v in stats.content_types.items() %}<span class="badge">{{ k }}: {{ v }}</span> {% endfor %}
+    </div>
+  </div>
+  {% if stats.top_tags %}
+  <div style="margin-top:10px">
+    <div class="kv">Top tags <span class="muted small">(click to filter)</span></div>
+    <div class="chips">
+      {% for tag, n in stats.top_tags %}
+      <span class="chip" hx-get="/project/{{ project.id }}/_results?scope={{ scope }}&tag={{ tag }}"
+            hx-target="#results" hx-swap="innerHTML">{{ tag }} ({{ n }})</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% if stats.people %}
+  <div style="margin-top:10px">
+    <div class="kv">People mentioned <span class="muted small">(click to filter)</span></div>
+    <div class="chips">
+      {% for person in stats.people %}
+      <span class="chip" hx-get="/project/{{ project.id }}/_results?scope={{ scope }}&person={{ person }}"
+            hx-target="#results" hx-swap="innerHTML">{{ person }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <form hx-get="/project/{{ project.id }}/_results?scope={{ scope }}" hx-target="#results" hx-swap="innerHTML"
+        hx-trigger="submit, change from:select">
+    <div class="row">
+      <div class="field" style="flex:2"><label>Search descriptions</label>
+        <input name="q" placeholder="keyword…" style="width:100%"></div>
+      <div class="field"><label>Sentiment</label>
+        <select name="sentiment">
+          <option value="">any</option>
+          <option>positive</option><option>negative</option>
+          <option>neutral</option><option>mixed</option>
+        </select></div>
+      <div class="field"><label>&nbsp;</label><button type="submit">Filter</button></div>
+    </div>
+  </form>
+</div>
+
+<div id="results"
+     hx-get="/project/{{ project.id }}/_results?scope={{ scope }}"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  <div class="muted">Loading…</div>
+</div>
+{% endblock %}

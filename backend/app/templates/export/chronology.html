@@ -1,0 +1,43 @@
+{% extends "_base.html" %}
+{% set active = 'chronology' %}
+{% set C = apparatus.chronology %}
+{% block title %}Chronology{% endblock %}
+{% block content %}
+<h1>What the site reported, dated by when it happened</h1>
+<p class="muted">A web archive hands you one date: when a crawler saw the page. That is not when anything
+  happened. Each close reading was asked separately for the dates of the events the piece discusses, and
+  this is the result — {{ C.dated_events }} of {{ C.total_events }} reported events could be placed in time.
+  It is not a timeline of the site; it is a timeline of what the site thought was worth reporting.</p>
+
+<h2>How far the coverage reached</h2>
+<div class="table-wrap"><table>
+  <tr><th>Capture year</th><th>Documents</th><th>How the pieces stand to their subject</th><th>Median look-back</th></tr>
+  {% for yr, t in apparatus.temporal.items() %}
+  <tr><td><b>{{ yr }}</b></td><td>{{ t.documents }}</td>
+      <td class="small">{% for m, n in t.modes.items() %}{{ m|replace('_',' ') }} ({{ n }}){{ ' · ' if not loop.last }}{% endfor %}</td>
+      <td>{% if t.median_lookback_years is not none %}{{ t.median_lookback_years }} year{{ 's' if t.median_lookback_years != 1 }}{% else %}—{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>Events</h2>
+<div class="table-wrap"><table>
+  <tr><th>When</th><th>What</th><th>Where</th><th>Source</th></tr>
+  {% for e in C.events %}
+  <tr><td class="nowrap">{{ e.when }}</td><td>{{ e.what }}</td>
+      <td class="muted">{{ e.where or '' }}</td>
+      <td><a href="pages.html#P{{ e.file_id }}">P{{ e.file_id }}</a></td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>Assertions to check</h2>
+<p class="muted">Specific claims the pages make — figures, dates, decisions, names of things — pulled out so
+  they can be verified against other sources. They are recorded here because the site said them, not because
+  they are true. Nothing below has been checked; that is the work this list exists to make possible.</p>
+<div class="table-wrap"><table>
+  <tr><th>Year</th><th>Assertion</th><th>Source</th></tr>
+  {% for f in facts %}
+  <tr><td class="nowrap muted">{{ f.year or '' }}</td><td>{{ f.fact }}</td>
+      <td><a href="pages.html#P{{ f.file_id }}">P{{ f.file_id }}</a></td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

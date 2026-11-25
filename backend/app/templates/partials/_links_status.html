@@ -1,0 +1,84 @@
+{% set L = links %}
+<div {% if L.any_running %}hx-get="/project/{{ project.id }}/_links-status" hx-trigger="every 3s" hx-swap="outerHTML" hx-target="this"{% endif %}>
+  {% if info %}<div class="notice info">{{ info }}</div>{% endif %}
+  <div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+
+    {% set j = L.jobs.extract %}
+    <div class="step {{ 'done' if L.total_links else 'current' }}">
+      <h3>Extract links</h3>
+      {% if L.total_links %}
+        <div class="kv"><b>{{ L.total_links }}</b> distinct links · <b>{{ L.citations }}</b> citations</div>
+      {% endif %}
+      {% if j.running %}
+        <div class="progress"><span style="width:{{ (100 * j.done / j.total)|round if j.total else 0 }}%"></span></div>
+        <div class="muted small">{{ j.done }} / {{ j.total }} captures · {{ j.current|truncate_url(50) if j.current }}</div>
+      {% else %}
+        {% if j.message %}<div class="muted small">{{ j.message }}</div>{% endif %}
+        <button hx-post="/project/{{ project.id }}/links/extract" hx-target="#links-status" hx-swap="innerHTML"
+                class="{{ 'secondary' if L.total_links }}">{{ 'Re-extract' if L.total_links else 'Extract links' }}</button>
+      {% endif %}
+    </div>
+
+    {% set j = L.jobs.recover %}
+    <div class="step {{ 'current' if L.recovery.pending else ('done' if L.recovery.recovered else 'todo') }}">
+      <h3>Recover from the Wayback Machine</h3>
+      <div class="progress"><span style="width:{{ L.recover_pct }}%"></span></div>
+      <div class="kv small">
+        <b>{{ L.recovery.recovered or 0 }}</b> recovered ·
+        <b>{{ L.recovery.not_archived or 0 }}</b> never archived ·
+        {{ L.recovery.error or 0 }} errors · {{ L.recovery.pending or 0 }} to go
+        {% if L.recovery.in_corpus %}<br><span class="muted">{{ L.recovery.in_corpus }} internal links already in the corpus</span>{% endif %}
+      </div>
+      {% if j.running %}
+        <div class="muted small">{{ j.message or '' }} {{ j.current|truncate_url(50) if j.current }}</div>
+        <button class="danger" hx-post="/project/{{ project.id }}/links/stop-recover" hx-target="#links-status" hx-swap="innerHTML">Stop</button>
+      {% else %}
+        {% if j.message %}<div class="muted small">{{ j.message }}</div>{% endif %}
+        {% if L.recovery.pending %}
+        <button hx-post="/project/{{ project.id }}/links/recover" hx-target="#links-status" hx-swap="innerHTML">Recover {{ L.recovery.pending }} links</button>
+        {% endif %}
+        {% if L.unconfirmed %}
+        <button class="secondary" title="Rechecked against the CDX index, which was offline when these were marked"
+                hx-post="/project/{{ project.id }}/links/requeue-unconfirmed" hx-target="#links-status" hx-swap="innerHTML">Recheck {{ L.unconfirmed }} unconfirmed</button>
+        {% endif %}
+        {% if L.recovery.error %}
+        <button class="secondary" hx-post="/project/{{ project.id }}/links/requeue-errors" hx-target="#links-status" hx-swap="innerHTML">Retry {{ L.recovery.error }} errors</button>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    {% set j = L.jobs.analyze %}
+    <div class="step {{ 'current' if L.analysis.pending else ('done' if L.analysis.processed else 'todo') }}">
+      <h3>Analyze recovered pages (AI)</h3>
+      <div class="progress proc"><span style="width:{{ L.analyze_pct }}%"></span></div>
+      <div class="kv small">
+        <b>{{ L.analysis.processed or 0 }}</b> analyzed · {{ L.analysis.pending or 0 }} waiting ·
+        {{ L.analysis.error or 0 }} errors · {{ L.analysis.skipped or 0 }} skipped
+      </div>
+      {% if j.running %}
+        <div class="muted small">{{ j.calls }} AI calls this run · {{ j.message or '' }}</div>
+        <button class="danger" hx-post="/project/{{ project.id }}/links/stop-analyze" hx-target="#links-status" hx-swap="innerHTML">Stop</button>
+      {% else %}
+        {% if j.message %}<div class="muted small">{{ j.message }}</div>{% endif %}
+        {% if L.analysis.pending %}
+        <form hx-post="/project/{{ project.id }}/links/analyze" hx-target="#links-status" hx-swap="innerHTML" class="row" style="gap:6px;align-items:center">
+          <label class="small muted">Up to</label>
+          <input type="number" name="limit" value="{{ [L.analysis.pending, 100]|min }}" min="1" max="{{ L.analysis.pending }}" style="width:80px">
+          <button>AI calls</button>
+        </form>
+        {% endif %}
+        {% if L.analysis.error %}
+        <button class="secondary" hx-post="/project/{{ project.id }}/links/requeue-analysis_errors" hx-target="#links-status" hx-swap="innerHTML">Retry {{ L.analysis.error }} errors</button>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if L.kinds %}
+  <details style="margin-top:10px"><summary class="muted small">How the links were sorted</summary>
+    <div class="chips" style="margin-top:8px">
+      {% for (scope, kind), n in L.kinds %}<span class="chip">{{ scope }} · {{ kind }} <span class="muted">{{ n }}</span></span>{% endfor %}
+    </div>
+  </details>
+  {% endif %}
+</div>

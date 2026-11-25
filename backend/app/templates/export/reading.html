@@ -1,0 +1,143 @@
+{% extends "_base.html" %}
+{% set active = 'reading' %}
+{% set A = apparatus %}
+{% block title %}Close reading{% endblock %}
+{% block content %}
+<h1>Reading the documents</h1>
+<p class="muted">Every article-shaped page was read one at a time and asked the questions a source is asked:
+  who writes it, who it quotes, who it only writes about, where its events happen, when they happened,
+  what it asserts, and what it is for. This page is what {{ A.documents }} such readings add up to.
+  The individual readings are in <code>readings.json</code>; each one names the page it came from.</p>
+
+<h2>Who</h2>
+{% if A.actors.masthead %}
+<p>These names appear on a quarter or more of all documents. At that frequency a name is not coverage, it is
+  furniture — a sidebar, a staff box, a byline block. Read as such, the list is the editorial team, recovered
+  without anyone having written it down:</p>
+<p>{% for p in A.actors.masthead %}<b>{{ p.name }}</b>{% if p.affiliation %} <span class="muted">({{ p.affiliation }})</span>{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>
+{% endif %}
+
+<h3>Bylines</h3>
+<div class="table-wrap"><table>
+  <tr><th>Name</th><th>Affiliation</th><th>Pieces signed</th></tr>
+  {% for p in A.actors.authors[:25] %}
+  <tr><td>{{ p.name }}</td><td class="muted">{{ p.affiliation or '—' }}</td><td>{{ p.authored }}</td></tr>
+  {% endfor %}
+</table></div>
+
+<h3>Who was given speech, and who was only spoken about</h3>
+<p class="muted">A publication's choice of whom to quote is a choice about whose account counts. Both lists below
+  are drawn from the same population of named people; the difference is the role the text gave them.</p>
+<div class="table-wrap"><table>
+  <tr><th>Quoted more than written about</th><th>Quoted</th><th>Written about</th></tr>
+  {% for p in A.voice.speakers %}
+  <tr><td>{{ p.name }}{% if p.affiliation %} <span class="muted">({{ p.affiliation }})</span>{% endif %}</td>
+      <td>{{ p.quoted }}</td><td class="muted">{{ p.subject }}</td></tr>
+  {% else %}<tr><td colspan="3" class="muted">Nobody.</td></tr>{% endfor %}
+</table></div>
+<div class="table-wrap"><table>
+  <tr><th>Written about more than quoted</th><th>Written about</th><th>Quoted</th></tr>
+  {% for p in A.voice.spoken_about %}
+  <tr><td>{{ p.name }}{% if p.affiliation %} <span class="muted">({{ p.affiliation }})</span>{% endif %}</td>
+      <td>{{ p.subject }}</td><td class="muted">{{ p.quoted }}</td></tr>
+  {% else %}<tr><td colspan="3" class="muted">Nobody.</td></tr>{% endfor %}
+</table></div>
+<p class="muted">{{ A.actors.distinct_people }} distinct people were named. Names were merged only on an
+  unambiguous match — a shorter name folds into a longer one when every word of it appears there and exactly
+  one longer name qualifies. Nicknames and handles were never merged, so <i>AMLO</i> and
+  <i>Andrés Manuel López Obrador</i> are listed separately; deciding they are one person is your call.</p>
+
+<h2>Where</h2>
+<div class="table-wrap"><table>
+  <tr><th>Place</th><th>Kind</th><th>Documents</th></tr>
+  {% for p in A.gazetteer.places[:40] %}
+  <tr><td>{{ p.name }}</td><td class="muted">{{ p.kind }}</td><td>{{ p.documents }}</td></tr>
+  {% endfor %}
+</table></div>
+<p class="muted">{{ A.gazetteer.distinct_places }} distinct places across the readings.</p>
+
+<h2>Institutions</h2>
+<div class="table-wrap"><table>
+  <tr><th>Organization</th><th>Kind</th><th>Documents</th></tr>
+  {% for o in A.organizations.organizations[:40] %}
+  <tr><td>{{ o.name }}</td><td class="muted">{{ o.kind }}</td><td>{{ o.documents }}</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>What the pieces are for</h2>
+<p class="muted">Form is evidence. A publication that begins in straight news and ends in reviews and
+  chronicles has changed what it is, whether or not it ever said so.</p>
+<div class="cols">
+  {% for field, label in [('genre','Form'), ('intent','Register'), ('stance','Posture')] %}
+  <div>
+    <h3>{{ label }}</h3>
+    <table>
+      {% for value, n in A.purpose[field] %}<tr><td>{{ value|replace('_',' ') }}</td><td>{{ n }}</td></tr>{% endfor %}
+    </table>
+  </div>
+  {% endfor %}
+</div>
+
+<h3>Year by year</h3>
+<div class="table-wrap"><table>
+  <tr><th>Year</th><th>Form</th><th>Register</th><th>Posture</th></tr>
+  {% for yr, d in A.purpose.by_year.items() %}
+  <tr><td><b>{{ yr }}</b></td>
+    {% for field in ['genre', 'intent', 'stance'] %}
+    <td class="small">{% for value, n in (d.get(field) or [])[:3] %}{{ value|replace('_',' ') }} ({{ n }}){{ ' · ' if not loop.last }}{% endfor %}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table></div>
+
+{% set R = apparatus.reception %}
+{% if R.comments %}
+<h2>What came back</h2>
+<p class="muted">Every other page in this archive studies what the publication said. This one studies what
+  readers did with it. Comments survive in the captured markup, so they were read out of the page directly —
+  no AI was involved, nothing here is an estimate, and anyone can verify a line by opening the capture it
+  cites. Because comments accumulate after publication while the article text does not, they were taken from
+  the <i>last</i> surviving capture of each page.</p>
+
+<p><b>{{ R.reader_comments }}</b> reader comments on <b>{{ R.pages_with_comments }}</b> of
+  {{ R.documents }} documents — <b>{{ R.engagement_pct }}%</b> of pieces drew any response at all, from
+  <b>{{ R.distinct_commenters }}</b> distinct readers, {{ R.returning_commenters }} of whom appear on more
+  than one piece. The publication replied in its own comments <b>{{ R.site_comments }}</b> times, on
+  {{ R.answered_pages }} of the {{ R.pages_with_comments }} discussed pieces ({{ R.answered_share }}%).</p>
+
+{% if R.by_year|length == 1 %}
+<p><b>Every surviving comment falls in {{ R.by_year[0][0] }}.</b> Whether the site later closed its comments,
+  changed theme, or simply stopped drawing them cannot be settled from the captures alone — but the audience
+  visible in this archive belongs to a single year of a project that ran for four.</p>
+{% endif %}
+
+<h3>Most discussed</h3>
+<div class="table-wrap"><table>
+  <tr><th>Piece</th><th>Reader comments</th><th>Site replied</th></tr>
+  {% for p in R.most_discussed %}
+  <tr><td>{% if p.file_id %}<a href="pages.html#P{{ p.file_id }}">{{ p.title or p.url }}</a>{% else %}{{ p.title or p.url }}{% endif %}</td>
+      <td>{{ p.from_readers }}</td><td class="muted">{{ 'yes' if p.answered else '' }}</td></tr>
+  {% endfor %}
+</table></div>
+
+<h3>Who commented</h3>
+<div class="table-wrap"><table>
+  <tr><th>Reader</th><th>Comments</th><th>Pieces</th></tr>
+  {% for v in R.voices %}
+  <tr><td>{{ v.name }}</td><td>{{ v.comments }}</td><td>{{ v.pages }}</td></tr>
+  {% endfor %}
+</table></div>
+<p class="muted">The full text of every comment is in <code>comments.csv</code>, with the page and the capture
+  it was read from.{% if R.unread_pages %} {{ R.unread_pages }} commented page{{ 's' if R.unread_pages != 1 }}
+  {{ 'is' if R.unread_pages == 1 else 'are' }} not linked above: {{ 'it' if R.unread_pages == 1 else 'they' }}
+  fell outside the article-shaped set that was close-read.{% endif %}{% if apparatus.actors.moved_to_audience %} {{ apparatus.actors.moved_to_audience|length }}
+  name{{ 's' if apparatus.actors.moved_to_audience|length != 1 }} that the close reading had recorded as named
+  in passing turned out to be commenters, and {{ 'was' if apparatus.actors.moved_to_audience|length == 1 else 'were' }}
+  moved out of the coverage counts above: {{ apparatus.actors.moved_to_audience|join(', ') }}.{% endif %}</p>
+{% endif %}
+
+<h2>Under what description</h2>
+<p class="muted">The recurring terms the site used to construe its subjects, in its own wording. These are not
+  topics; they are the framings a topic was given.</p>
+<p>{% for value, n in apparatus.frames %}{{ value }} <span class="muted">({{ n }})</span>{{ ' · ' if not loop.last }}{% endfor %}</p>
+{% endblock %}

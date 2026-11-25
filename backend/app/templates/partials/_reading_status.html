@@ -1,0 +1,42 @@
+{% set R = reading %}
+{% set j = R.job %}
+<div {% if j.running %}hx-get="/project/{{ project.id }}/_reading-status" hx-trigger="every 3s" hx-swap="outerHTML" hx-target="this"{% endif %}>
+  {% if info %}<div class="notice info">{{ info }}</div>{% endif %}
+
+  {% if not R.total %}
+    <p class="muted small">Nothing queued yet. Selecting picks one capture per article-shaped URL —
+      tag listings and pagination are left out, because they have no author, no place and no claim.</p>
+    <button hx-post="/project/{{ project.id }}/reading/select" hx-target="#reading-status" hx-swap="innerHTML">
+      Choose the documents
+    </button>
+  {% else %}
+    <div class="progress proc"><span style="width:{{ R.pct }}%"></span></div>
+    <div class="kv small">
+      <b>{{ R.counts.processed or 0 }}</b> read ·
+      {{ R.pending }} to go · {{ R.counts.error or 0 }} errors ·
+      {{ R.counts.skipped or 0 }} skipped
+      {% if R.copies %}<br><span class="muted">{{ R.copies }} duplicate captures given the same reading</span>{% endif %}
+    </div>
+
+    {% if j.running %}
+      <div class="muted small">{{ j.calls }} AI calls this run{% if j.usage %} · {{ (j.usage * 100)|round|int }}% of the monthly quota used{% endif %}
+        {% if j.current %}<br>{{ j.current|truncate_url(60) }}{% endif %}</div>
+      <button class="danger" hx-post="/project/{{ project.id }}/reading/stop" hx-target="#reading-status" hx-swap="innerHTML">Stop</button>
+    {% else %}
+      {% if j.message %}<div class="muted small">{{ j.message }}</div>{% endif %}
+      <div class="row" style="gap:6px;align-items:center;margin-top:8px">
+        {% if R.pending %}
+        <form hx-post="/project/{{ project.id }}/reading/run" hx-target="#reading-status" hx-swap="innerHTML" class="row" style="gap:6px;align-items:center">
+          <label class="small muted">Read up to</label>
+          <input type="number" name="limit" value="{{ [R.pending, 100]|min }}" min="1" max="{{ R.pending }}" style="width:80px">
+          <button>documents</button>
+        </form>
+        {% endif %}
+        <button class="secondary" hx-post="/project/{{ project.id }}/reading/select" hx-target="#reading-status" hx-swap="innerHTML">Re-check selection</button>
+        {% if R.counts.error %}
+        <button class="secondary" hx-post="/project/{{ project.id }}/reading/requeue-errors" hx-target="#reading-status" hx-swap="innerHTML">Retry {{ R.counts.error }} errors</button>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% endif %}
+</div>

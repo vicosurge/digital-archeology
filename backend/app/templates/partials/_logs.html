@@ -1,0 +1,24 @@
+{% if not records %}
+  <div class="muted">Nothing logged that matches. Logging starts with this version, so older events are not here.</div>
+{% else %}
+<table class="small" style="width:100%; border-collapse:collapse">
+  <thead><tr class="muted" style="text-align:left">
+    <th style="padding:4px 8px; white-space:nowrap">Time (UTC)</th><th style="padding:4px 8px">Level</th>
+    <th style="padding:4px 8px">Where</th><th style="padding:4px 8px">Message</th></tr></thead>
+  <tbody>
+  {% for r in records %}
+  <tr style="border-top:1px solid var(--border, #ddd); vertical-align:top">
+    <td style="padding:4px 8px; white-space:nowrap">{{ r.t[:10] }} {{ r.t[11:19] }}</td>
+    <td style="padding:4px 8px; {% if r.level == 'error' %}color:var(--danger); font-weight:bold{% elif r.level == 'warning' %}color:#b45309{% endif %}">{{ r.level }}</td>
+    <td style="padding:4px 8px; white-space:nowrap" class="muted">
+      {{ r.logger.replace('app.', '') }}{% if r.process == 'cli' %} · cli{% endif %}
+      {% if r.project is defined and r.project %}<br><a href="/project/{{ r.project }}">{{ (names or {}).get(r.project, 'project ' ~ r.project) }}</a>{% endif %}</td>
+    <td style="padding:4px 8px">
+      {% set first, _, rest = r.msg.partition('\n') %}
+      {% if rest %}<details><summary>{{ first }}</summary><pre style="white-space:pre-wrap; font-size:11px">{{ rest }}</pre></details>
+      {% else %}{{ first }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}

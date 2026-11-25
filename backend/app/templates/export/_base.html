@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{% endblock %} — {{ project.domain }} archive</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><div class="inner">
+  <div class="site">{{ project.domain }}</div>
+  <div class="sub">An archive recovered from the Internet Archive’s Wayback Machine ·
+    studied period {{ timeline.first_seen }} – {{ timeline.last_seen }}</div>
+  <nav>
+    <a href="index.html" class="{{ 'on' if active == 'index' }}">Findings</a>
+    <a href="pages.html" class="{{ 'on' if active == 'pages' }}">Pages ({{ counts.pages_analyzed }})</a>
+    <a href="links.html" class="{{ 'on' if active == 'links' }}">Linked material ({{ counts.links_listed }})</a>
+    <a href="people.html" class="{{ 'on' if active == 'people' }}">People ({{ people|length }})</a>
+    {% if readings %}
+    <a href="reading.html" class="{{ 'on' if active == 'reading' }}">Close reading ({{ readings|length }})</a>
+    <a href="chronology.html" class="{{ 'on' if active == 'chronology' }}">Chronology</a>
+    {% endif %}
+    <a href="methodology.html" class="{{ 'on' if active == 'methodology' }}">Methodology</a>
+  </nav>
+</div></header>
+<main>
+{% block content %}{% endblock %}
+<footer>Generated {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC by Digital Archeology.
+AI-written summaries are finding aids: verify every claim against the capture it cites.</footer>
+</main>
+</body>
+</html>

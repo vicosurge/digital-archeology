@@ -1,0 +1,116 @@
+{% if not card %}
+  <div class="panel muted">
+    No card yet. Click <b>Build card</b> to gather ownership (RDAP), detect the tech stack
+    from the archived HTML, build the capture timeline, and synthesize a summary with the LLM.
+  </div>
+{% else %}
+
+  {# ---- Summary (the headline) ---- #}
+  <div class="panel">
+    <h2>Summary</h2>
+    {% if card.llm_summary %}
+      <p style="font-size:1.02rem">{{ card.llm_summary }}</p>
+      <div class="muted small">Synthesized by {{ card.llm_model_used }}</div>
+    {% else %}
+      <div class="muted">No summary available.</div>
+    {% endif %}
+  </div>
+
+  <div class="row">
+    {# ---- Ownership ---- #}
+    <div class="panel" style="flex:1; min-width:300px">
+      <h2>Ownership (WHOIS / RDAP)</h2>
+      {% if card.whois_source == 'rdap' %}
+        <table class="summary">
+          <tr><td class="k">Registrar</td><td>{{ card.registrar or '—' }}</td></tr>
+          <tr><td class="k">Registered</td><td>{{ card.whois_created or '—' }}</td></tr>
+          <tr><td class="k">Expires</td><td>{{ card.whois_expires or '—' }}</td></tr>
+          <tr><td class="k">Updated</td><td>{{ card.whois_updated or '—' }}</td></tr>
+          <tr><td class="k">Nameservers</td><td>
+            {% for ns in card.nameservers or [] %}{{ ns }}<br>{% else %}—{% endfor %}</td></tr>
+          <tr><td class="k">Status</td><td>
+            {% for st in card.whois_status or [] %}<span class="badge">{{ st }}</span> {% else %}—{% endfor %}</td></tr>
+          <tr><td class="k">Registrant</td><td>
+            {% if card.registrant %}
+              {{ card.registrant.name or '' }} {{ card.registrant.org or '' }}
+              {% if card.registrant.email %}<br>{{ card.registrant.email }}{% endif %}
+            {% else %}<span class="muted">redacted / not disclosed</span>{% endif %}</td></tr>
+        </table>
+        <div class="muted small" style="margin-top:8px">
+          Modern registrant details are usually GDPR-redacted. See “Likely people” below
+          for names recovered from the archived content.
+        </div>
+      {% elif card.whois_source == 'unregistered' %}
+        {# For a dead site this is the most telling field on the card, so it is
+           stated as a result rather than shown as a missing value. #}
+        <div><b>Not currently registered.</b></div>
+        <div class="muted small" style="margin-top:6px">
+          The authoritative registry has no record for this domain — it is
+          unregistered as of the date this card was generated. Whatever the
+          archived captures show, nobody holds it now.
+        </div>
+      {% elif card.whois_source == 'error' %}
+        <div class="muted">RDAP lookup failed (network or server error).</div>
+      {% else %}
+        <div class="muted">No RDAP record found for this domain.</div>
+      {% endif %}
+    </div>
+
+    {# ---- Likely people ---- #}
+    <div class="panel" style="flex:1; min-width:300px">
+      <h2>Likely people</h2>
+      <div class="muted small">From people named across the analyzed pages.</div>
+      {% if card.likely_people %}
+        <div class="chips" style="margin-top:8px">
+          {% for p in card.likely_people %}
+          <span class="chip">{{ p.name }} <span class="muted">×{{ p.mentions }}</span></span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="muted" style="margin-top:8px">No people identified yet (analyze pages first).</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---- Tech stack ---- #}
+  <div class="panel">
+    <h2>Technology stack</h2>
+    <div class="muted small">Detected from archived HTML (body only — headers aren't preserved by Wayback).</div>
+    {% if card.tech_stack %}
+      <div class="tech-list" style="margin-top:10px">
+        {% for t in card.tech_stack %}
+        <div class="tech">
+          {{ t.name }}{% if t.version %} <span class="ver">{{ t.version }}</span>{% endif %}
+          <div class="ev">{{ t.categories|join(', ') }} · {{ t.evidence }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="muted" style="margin-top:8px">No technologies detected (download some HTML first).</div>
+    {% endif %}
+  </div>
+
+  {# ---- Timeline ---- #}
+  <div class="panel">
+    <h2>Wayback timeline</h2>
+    {% set tl = card.timeline %}
+    {% if tl and tl.total_captures %}
+      <div class="kv"><b>First seen:</b> {{ tl.first_seen }} &nbsp; <b>Last seen:</b> {{ tl.last_seen }}
+        &nbsp; <b>Captures:</b> {{ tl.total_captures }}</div>
+      {% if tl.per_year %}
+        {% set maxv = tl.per_year.values()|max %}
+        <div class="timeline-bars">
+          {% for year, count in tl.per_year.items() %}
+          <div class="tl-bar" style="height:{{ (100 * count / maxv)|round(0, 'ceil') }}%"
+               title="{{ year }}: {{ count }} captures">
+            <span>{{ year[2:] }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="muted">No capture timeline (queue and download files first).</div>
+    {% endif %}
+  </div>
+
+{% endif %}

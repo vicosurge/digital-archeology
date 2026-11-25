@@ -1,0 +1,54 @@
+{% extends "_base.html" %}
+{% import "_macros.html" as m %}
+{% set active = 'links' %}
+{% block title %}Linked material{% endblock %}
+{% block content %}
+<h1>What the site linked to</h1>
+<p class="muted">Articles, sources, documents and sites that {{ project.domain }} linked to, recovered from the
+  Wayback Machine at the capture closest to when the site first linked to them. “Gap” is the number of days
+  between that first link and the capture used: a large gap means the page may have changed in between.</p>
+
+{% set external = links|selectattr('scope', 'equalto', 'external')|list %}
+{% set internal = links|selectattr('scope', 'equalto', 'internal')|list %}
+<div class="toc ui">
+  <div><a href="#external">External references</a> <span class="muted">{{ external|length }}</span></div>
+  <div><a href="#internal">The site’s own articles, not otherwise captured</a> <span class="muted">{{ internal|length }}</span></div>
+</div>
+
+{% macro link_item(l) %}
+<div class="item" id="{{ l.id }}">
+  <div class="head">
+    <span class="url">{{ l.url }}</span>
+    <span class="meta">{{ l.id }} · {{ l.kind }} · linked from {{ l.cited_by_pages }} capture{{ 's' if l.cited_by_pages != 1 }}</span>
+  </div>
+  {% if l.recovery_status == 'recovered' %}
+    {% if l.title %}<h3>{{ l.title }}</h3>{% endif %}
+    {% if l.description %}<p>{{ l.description }}</p>{% endif %}
+    {% if l.relation %}<div class="meta"><b>Relation to {{ project.domain }}:</b> {{ l.relation|replace('_', ' ') }}{% if l.relation_note %} — {{ l.relation_note }}{% endif %}</div>{% endif %}
+    <div class="meta">first linked {{ l.first_cited }} · captured {{ l.capture_date }}
+      {% if l.capture_distance_days is not none %} · gap {{ l.capture_distance_days }} days{% endif %}
+      {% if l.content_type %} · {{ l.content_type }}{% endif %}{% if l.sentiment %} · tone {{ m.sentiment(l.sentiment) }}{% endif %}</div>
+    <div>{% for s in l.subjects %}<span class="tag">{{ s }}</span>{% endfor %}</div>
+    <div class="meta"><a href="{{ l.wayback_url }}">View on the Wayback Machine</a>{% if l.raw_file %} · <a href="{{ l.raw_file }}">raw capture</a>{% endif %}</div>
+  {% elif l.recovery_status == 'not_archived' %}
+    <div class="meta">first linked {{ l.first_cited }} · <b>never captured by the Internet Archive</b> — this material is likely lost.</div>
+  {% else %}
+    <div class="meta">first linked {{ l.first_cited }} · not recovered ({{ l.recovery_status }})</div>
+  {% endif %}
+  {% if l.anchor %}<div class="meta">Link text: “{{ l.anchor }}”</div>{% endif %}
+  {% if l.citing %}
+  <details class="meta"><summary>Linked from {{ l.citing|length }} page{{ 's' if l.citing|length != 1 }}</summary>
+    <ul>{% for c in l.citing %}<li>{{ c.date }} — {% if c.page_id %}<a href="pages.html#{{ c.page_id }}">{{ c.url }}</a>{% else %}<a href="{{ c.wayback_url }}">{{ c.url }}</a>{% endif %}{% if c.anchor %} (“{{ c.anchor }}”){% endif %}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<h2 id="external">External references</h2>
+{% for l in external %}{{ link_item(l) }}{% else %}<p class="muted">None.</p>{% endfor %}
+
+<h2 id="internal">The site’s own articles, not otherwise captured</h2>
+<p class="muted">Pages of {{ project.domain }} that its other pages linked to but that were missing from the original
+  crawl, recovered separately.</p>
+{% for l in internal %}{{ link_item(l) }}{% else %}<p class="muted">None.</p>{% endfor %}
+{% endblock %}

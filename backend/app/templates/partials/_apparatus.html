@@ -1,0 +1,193 @@
+{% set A = app %}
+{% if not A.documents %}
+  <p class="muted">No documents have been read yet.</p>
+{% else %}
+<p class="muted small">Built from {{ A.documents }} close-read documents. No AI call: everything below is
+  counted from readings that already exist.</p>
+
+{# ---- who ---- #}
+<h3>Who</h3>
+{% if A.actors.masthead %}
+<p class="small">Appearing on a quarter or more of all documents, so recorded as the publication itself rather
+  than as coverage — this is the masthead, recovered without anyone writing it down:</p>
+<div class="chips">
+  {% for p in A.actors.masthead %}
+    <span class="chip" title="{{ p.documents }} documents">{{ p.name }}
+      {% if p.affiliation %}<span class="muted">· {{ p.affiliation }}</span>{% endif %}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:12px">
+  <div class="step">
+    <h3>Bylines</h3>
+    <table class="compact"><tbody>
+      {% for p in A.actors.authors[:12] %}
+      <tr><td>{{ p.name }}{% if p.affiliation %}<br><span class="muted small">{{ p.affiliation }}</span>{% endif %}</td>
+          <td class="num">{{ p.authored }}</td></tr>
+      {% else %}<tr><td class="muted small">No bylines outside the masthead.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <div class="step">
+    <h3>Given speech</h3>
+    <table class="compact"><tbody>
+      {% for p in A.voice.speakers %}
+      <tr><td>{{ p.name }}{% if p.affiliation %}<br><span class="muted small">{{ p.affiliation }}</span>{% endif %}</td>
+          <td class="num">{{ p.quoted }}</td></tr>
+      {% else %}<tr><td class="muted small">Nobody is quoted more often than they are written about.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <div class="step">
+    <h3>Written about, rarely quoted</h3>
+    <table class="compact"><tbody>
+      {% for p in A.voice.spoken_about %}
+      <tr><td>{{ p.name }}{% if p.affiliation %}<br><span class="muted small">{{ p.affiliation }}</span>{% endif %}</td>
+          <td class="num" title="quoted {{ p.quoted }} time(s)">{{ p.subject }}</td></tr>
+      {% else %}<tr><td class="muted small">Nobody is written about more often than they are quoted.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</div>
+<p class="muted small">{{ A.actors.distinct_people }} distinct people named across the documents.
+  The third column is the one to read closely: it is a record of who the publication treated as a
+  subject rather than a source.</p>
+
+{# ---- where ---- #}
+<h3 style="margin-top:22px">Where</h3>
+<div class="chips">
+  {% for k, n in A.gazetteer.by_kind %}<span class="chip">{{ k }} <span class="muted">{{ n }}</span></span>{% endfor %}
+</div>
+<table class="compact" style="margin-top:10px"><thead><tr><th>Place</th><th>Kind</th><th class="num">Documents</th></tr></thead>
+<tbody>
+  {% for p in A.gazetteer.places[:20] %}
+  <tr><td>{{ p.name }}</td><td class="muted">{{ p.kind }}</td><td class="num">{{ p.documents }}</td></tr>
+  {% endfor %}
+</tbody></table>
+<p class="muted small">{{ A.gazetteer.distinct_places }} distinct places.</p>
+
+{# ---- institutions ---- #}
+<h3 style="margin-top:22px">Institutions</h3>
+<div class="chips">
+  {% for k, n in A.organizations.by_kind %}<span class="chip">{{ k }} <span class="muted">{{ n }}</span></span>{% endfor %}
+</div>
+<table class="compact" style="margin-top:10px"><tbody>
+  {% for o in A.organizations.organizations[:20] %}
+  <tr><td>{{ o.name }}</td><td class="muted">{{ o.kind }}</td><td class="num">{{ o.documents }}</td></tr>
+  {% endfor %}
+</tbody></table>
+
+{# ---- when ---- #}
+<h3 style="margin-top:22px">When</h3>
+<p class="muted small">Two clocks. A page has a capture date, which is when the archive saw it, and the
+  events it reports have dates of their own. Only the second is history.</p>
+<table class="compact"><thead><tr><th>Capture year</th><th>Documents</th><th>Mode</th><th class="num">Median look-back</th></tr></thead>
+<tbody>
+  {% for yr, t in A.temporal.items() %}
+  <tr><td><b>{{ yr }}</b></td><td>{{ t.documents }}</td>
+      <td class="small">{% for m, n in t.modes.items() %}{{ m|replace('_',' ') }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+      <td class="num">{% if t.median_lookback_years is not none %}{{ t.median_lookback_years }}y{% else %}—{% endif %}</td></tr>
+  {% endfor %}
+</tbody></table>
+<p class="small" style="margin-top:10px"><b>{{ A.chronology.dated_events }}</b> of
+  {{ A.chronology.total_events }} reported events could be dated.</p>
+<div class="chips">
+  {% for yr, n in A.chronology.by_year %}<span class="chip">{{ yr }} <span class="muted">{{ n }}</span></span>{% endfor %}
+</div>
+
+{# ---- what for ---- #}
+<h3 style="margin-top:22px">What the pieces are for</h3>
+<div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+  {% for field, label in [('genre','Form'), ('intent','Register'), ('stance','Posture')] %}
+  <div class="step">
+    <h3>{{ label }}</h3>
+    <table class="compact"><tbody>
+      {% for value, n in A.purpose[field] %}
+      <tr><td>{{ value|replace('_',' ') }}</td><td class="num">{{ n }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+  </div>
+  {% endfor %}
+</div>
+
+<h4 style="margin-top:16px">Year by year</h4>
+<table class="compact"><thead><tr><th>Year</th><th>Form</th><th>Register</th><th>Posture</th></tr></thead>
+<tbody>
+  {% for yr, d in A.purpose.by_year.items() %}
+  <tr><td><b>{{ yr }}</b></td>
+    {% for field in ['genre', 'intent', 'stance'] %}
+    <td class="small">{% for value, n in (d.get(field) or [])[:3] %}{{ value|replace('_',' ') }} <span class="muted">{{ n }}</span>{% if not loop.last %} · {% endif %}{% endfor %}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</tbody></table>
+
+{# ---- reception ---- #}
+{% set R = A.reception %}
+{% if R.comments %}
+<h3 style="margin-top:22px">What came back</h3>
+<p class="muted small">Reader comments, read straight out of the captured markup — no AI, no quota, and
+  anyone can check them against the capture. Comments accrete after publication, so they are taken from the
+  <i>last</i> capture of each page rather than the one that was read.</p>
+<div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+  <div class="step">
+    <h3>Reach</h3>
+    <div class="kv small">
+      <b>{{ R.reader_comments }}</b> reader comments on <b>{{ R.pages_with_comments }}</b> of
+      {{ R.documents }} documents<br>
+      <b>{{ R.engagement_pct }}%</b> of pieces drew any comment at all<br>
+      <b>{{ R.distinct_commenters }}</b> distinct readers,
+      {{ R.returning_commenters }} of whom commented on more than one piece
+    </div>
+  </div>
+  <div class="step">
+    <h3>Did the site answer?</h3>
+    <div class="kv small">
+      <b>{{ R.site_comments }}</b> replies from the publication's own account<br>
+      on <b>{{ R.answered_pages }}</b> of {{ R.pages_with_comments }} discussed pieces
+      (<b>{{ R.answered_share }}%</b>)
+    </div>
+    <div class="muted small" style="margin-top:6px">Marked in the markup, so counted rather than estimated.</div>
+  </div>
+  <div class="step">
+    <h3>When</h3>
+    <div class="chips">
+      {% for yr, n in R.by_year %}<span class="chip">{{ yr }} <span class="muted">{{ n }}</span></span>{% endfor %}
+    </div>
+    {% if R.by_year|length == 1 %}
+    <div class="muted small" style="margin-top:6px">Every surviving comment falls in a single year.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:12px">
+  <div class="step">
+    <h3>Most discussed</h3>
+    <table class="compact"><tbody>
+      {% for p in R.most_discussed[:10] %}
+      <tr><td>{{ p.title or (p.url|truncate_url(50)) }}{% if p.answered %} <span class="badge">answered</span>{% endif %}</td>
+          <td class="num">{{ p.from_readers }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+  </div>
+  <div class="step">
+    <h3>Who commented</h3>
+    <table class="compact"><tbody>
+      {% for v in R.voices[:10] %}
+      <tr><td>{{ v.name }}</td><td class="num" title="on {{ v.pages }} page(s)">{{ v.comments }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+  </div>
+</div>
+{% if A.actors.moved_to_audience %}
+<p class="muted small">{{ A.actors.moved_to_audience|length }} name{{ 's' if A.actors.moved_to_audience|length != 1 }}
+  the model had read as named-in-passing turned out to be commenters and were moved out of the coverage counts:
+  {{ A.actors.moved_to_audience|join(', ') }}.</p>
+{% endif %}
+{% endif %}
+
+{# ---- frames ---- #}
+<h3 style="margin-top:22px">Under what description</h3>
+<p class="muted small">The recurring terms the site used to construe its subjects, in its own wording.</p>
+<div class="chips">
+  {% for value, n in A.frames %}<span class="chip">{{ value }} <span class="muted">{{ n }}</span></span>{% endfor %}
+</div>
+{% endif %}

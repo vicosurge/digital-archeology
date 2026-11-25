@@ -1,0 +1,29 @@
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+{% set f = card.findings if card else None %}
+{% macro cites(ids) -%}
+  {%- for token in ids or [] %}{% set s = f.sources.get(token) %}<a class="chip" style="text-decoration:none" target="_blank"
+     href="{{ s.wayback_url if s else '#' }}" title="{{ (s.description or s.title or s.url) if s else token }}">{{ token }}{% if s and s.timestamp %} · {{ s.timestamp[:4] }}{% endif %}</a> {% endfor -%}
+{%- endmacro %}
+{% macro claim(c) -%}
+  {% if c %}<div style="margin:6px 0 12px;{{ 'border-left:3px solid var(--warn);padding-left:8px' if c.unsupported }}">
+    <div>{{ c.text }}</div>
+    {% if c.unsupported %}<div class="small" style="color:var(--warn)">⚠ no valid evidence cited</div>{% endif %}
+    <div class="chips" style="margin-top:4px">{{ cites(c.evidence) }}</div>
+  </div>{% endif %}
+{%- endmacro %}
+{% if not f %}
+  <div class="muted">Not drafted yet.</div>
+{% else %}
+  <h3>Overview</h3>{{ claim(f.overview) }}
+  {% if f.purpose_and_audience %}<h3>Purpose and audience</h3>{{ claim(f.purpose_and_audience) }}{% endif %}
+  {% if f.goals_and_outcome %}<h3>Did it achieve its goals? <span class="badge">{{ f.goals_and_outcome.assessment|replace('_',' ') }}</span></h3>{{ claim(f.goals_and_outcome) }}{% endif %}
+  {% if f.evolution %}<h3>How it changed</h3>{% for e in f.evolution %}<div class="muted small"><b>{{ e.period }}</b></div>{{ claim(e) }}{% endfor %}{% endif %}
+  {% if f.network %}<h3>Its network</h3>{{ claim(f.network) }}{% endif %}
+  {% if f.people %}<h3>People</h3>
+    <table class="summary">{% for p in f.people %}<tr><td class="k">{{ p.name }}</td><td>{{ p.role }}{% if p.unsupported %} <span class="small" style="color:var(--warn)">⚠</span>{% endif %}</td><td><div class="chips">{{ cites(p.evidence) }}</div></td></tr>{% endfor %}</table>
+  {% endif %}
+  {% if f.decline %}<h3>How it wound down</h3>{{ claim(f.decline) }}{% endif %}
+  {% if f.open_questions %}<h3>Open questions</h3><ul>{% for q in f.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>{% endif %}
+  <div class="muted small">Drafted by {{ card.findings_model }} on {{ card.findings_generated_at.strftime('%Y-%m-%d %H:%M') if card.findings_generated_at }}
+    from {{ f.evidence_shown.pages }} page summaries and {{ f.evidence_shown.links }} linked-page summaries.</div>
+{% endif %}

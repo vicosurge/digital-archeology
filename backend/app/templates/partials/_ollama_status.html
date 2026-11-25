@@ -1,0 +1,12 @@
+{% if ollama.status == "running" %}
+  <span class="muted small" title="{{ ollama.host }} — {{ ollama.models|join(', ') }}">
+    <span class="dot ok"></span>Ollama online
+    <span class="host">{{ ollama.host }}</span>
+    ({{ ollama.models|length }} models{% if ollama.authenticated %}, authenticated{% endif %})
+  </span>
+{% else %}
+  <span class="muted small" title="{{ ollama.message or '' }}">
+    <span class="dot off"></span>Ollama offline
+    <span class="host">{{ ollama.host }}</span>
+  </span>
+{% endif %}

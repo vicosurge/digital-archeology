@@ -1,0 +1,17 @@
+{% macro cites(ids, findings) -%}
+  {%- if ids %}<span class="cites">{% for token in ids %}{% set s = findings.sources.get(token) if findings.sources else None %}<a class="cite" href="{{ token|evidence_href }}" title="{{ (s.description or s.title or s.url) if s else token }}">{{ token }}{% if s and s.timestamp %} · {{ s.timestamp[:4] }}{% endif %}</a>{% endfor %}</span>{%- endif %}
+{%- endmacro %}
+
+{% macro claim(c, findings) -%}
+  {%- if c %}
+  <div class="claim {{ 'unsupported' if c.unsupported }}">
+    <p class="text">{{ c.text }}</p>
+    {% if c.unsupported %}<div class="small ui">⚠ No valid evidence cited — treat as unverified.</div>{% endif %}
+    {{ cites(c.evidence, findings) }}
+  </div>
+  {%- endif %}
+{%- endmacro %}
+
+{% macro sentiment(value, score=None) -%}
+  <span class="sent-{{ value or 'none' }}">{{ value or '—' }}{% if score is not none %} ({{ '%+.2f'|format(score) }}){% endif %}</span>
+{%- endmacro %}

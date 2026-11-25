@@ -1,0 +1,67 @@
+services:
+  # Digital Archeology Web Application
+  digital-archeology:
+    build: .
+    container_name: digital-archeology
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      # Persist database and downloaded files
+      - ./data:/app/data
+    environment:
+      # Point to Ollama - use host.docker.internal for Docker Desktop,
+      # the actual host IP for Linux, or a remote/cloud endpoint URL.
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      # Bearer token for an authenticated endpoint. Empty means no auth header.
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
+      - OLLAMA_AUTH_HEADER=${OLLAMA_AUTH_HEADER:-Authorization}
+      - OLLAMA_AUTH_SCHEME=${OLLAMA_AUTH_SCHEME:-Bearer}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+      # Analysis throughput
+      - LLM_CONCURRENCY=${LLM_CONCURRENCY:-4}
+      - LLM_REQUESTS_PER_MINUTE=${LLM_REQUESTS_PER_MINUTE:-0}
+      - LLM_REQUEST_TIMEOUT=${LLM_REQUEST_TIMEOUT:-180}
+      - LLM_CONNECT_TIMEOUT=${LLM_CONNECT_TIMEOUT:-10}
+      - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-3}
+      - LLM_BACKOFF_BASE=${LLM_BACKOFF_BASE:-1.5}
+      - LLM_MAX_CONTENT_CHARS=${LLM_MAX_CONTENT_CHARS:-8000}
+      - LLM_NUM_PREDICT=${LLM_NUM_PREDICT:-500}
+      # Quota budget. These MUST be forwarded: without them the container falls
+      # back to "no ceiling" even when .env sets one, and a Resume click would
+      # run until the endpoint's quota is exhausted.
+      - LLM_STOP_AT_SESSION_USAGE=${LLM_STOP_AT_SESSION_USAGE:-0}
+      - LLM_MAX_CALLS_PER_RUN=${LLM_MAX_CALLS_PER_RUN:-0}
+      # Matches the ./data volume mount below.
+      - DA_DATA_DIR=/app/data
+    extra_hosts:
+      # Allow container to reach host's Ollama on Linux
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Run Ollama in Docker (GPU support requires nvidia-docker)
+  # Uncomment to use containerized Ollama instead of host Ollama
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   # For GPU support, uncomment:
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: all
+  #   #           capabilities: [gpu]
+  #   restart: unless-stopped
+
+volumes:
+  ollama_data:

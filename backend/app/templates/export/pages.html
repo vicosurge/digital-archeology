@@ -1,0 +1,31 @@
+{% extends "_base.html" %}
+{% import "_macros.html" as m %}
+{% set active = 'pages' %}
+{% block title %}Pages{% endblock %}
+{% block content %}
+<h1>The site’s pages</h1>
+<p class="muted">Every page of {{ project.domain }} analyzed in the studied period, oldest first, dated by when the
+  Wayback Machine captured it. When a URL was captured several times, one capture was analyzed.</p>
+<div class="toc ui">{% for y in themes.years %}<div><a href="#y{{ y.year }}">{{ y.year }}</a> <span class="muted">{{ y.pages }} pages</span></div>{% endfor %}</div>
+
+{% for year, items in pages|groupby('year') %}
+<h2 id="y{{ year }}">{{ year }}</h2>
+{% for p in items %}
+<div class="item" id="{{ p.id }}">
+  <div class="head">
+    <span class="url">{{ p.url }}</span>
+    <span class="meta">{{ p.id }} · captured {{ p.date }}{% if p.captures > 1 %} · {{ p.captures }} captures{% endif %}</span>
+  </div>
+  <p>{{ p.description }}</p>
+  <div class="meta">
+    {{ p.content_type or '—' }} · tone {{ m.sentiment(p.sentiment, p.sentiment_score) }}
+    {% if p.estimated_date %} · dated in text: {{ p.estimated_date }} ({{ p.date_confidence }}){% endif %}
+  </div>
+  <div>{% for s in p.subjects %}<span class="tag">{{ s }}</span>{% endfor %}{% for t in p.tags %}<span class="tag">#{{ t }}</span>{% endfor %}</div>
+  {% if p.people %}<div class="meta">People: {% for n in p.people %}<a href="people.html#{{ n|lower|replace(' ', '-') }}">{{ n }}</a>{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+  <div class="meta"><a href="{{ p.wayback_url }}">View on the Wayback Machine</a>
+    {% if p.raw_file %} · <a href="{{ p.raw_file }}">raw capture</a>{% endif %} · analyzed by {{ p.model }}</div>
+</div>
+{% endfor %}
+{% endfor %}
+{% endblock %}

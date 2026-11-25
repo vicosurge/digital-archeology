@@ -1,0 +1,15 @@
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+<div class="row between" style="align-items:center">
+  <div>
+    {% if export %}
+      <a class="btn" href="/project/{{ project.id }}/export/download">Download {{ export.name }}</a>
+      <span class="muted small">{{ export.size_mb }} MB · built {{ export.built_at.strftime('%Y-%m-%d %H:%M') }}</span>
+    {% else %}
+      <span class="muted">No archive built yet.</span>
+    {% endif %}
+  </div>
+  <form hx-post="/project/{{ project.id }}/export" hx-target="#export" hx-swap="innerHTML" class="row" style="gap:8px;align-items:center">
+    <label class="small"><input type="checkbox" name="include_captures" value="1" checked> include raw captures</label>
+    <button>{{ 'Rebuild archive' if export else 'Build archive' }}<span class="spinner"> — packaging…</span></button>
+  </form>
+</div>

@@ -1,0 +1,40 @@
+{% set f = filters %}
+{% set base = '/project/' ~ project_id ~ '/_links-table' %}
+<form class="row" style="gap:8px;align-items:end;margin-bottom:10px" hx-get="{{ base }}" hx-target="#links-table" hx-swap="innerHTML" hx-trigger="change, submit">
+  <div class="field"><label class="small">Where</label>
+    <select name="scope">{% for v, l in [('external','External'),('internal','The site’s own'),('all','All')] %}<option value="{{ v }}" {{ 'selected' if f.scope == v }}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="small">Kind</label>
+    <select name="kind"><option value="">Any</option>{% for k in kinds %}<option {{ 'selected' if f.kind == k }}>{{ k }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="small">Status</label>
+    <select name="status">{% for v in ['recovered','not_archived','pending','error','in_corpus','not_selected',''] %}<option value="{{ v }}" {{ 'selected' if f.status == v }}>{{ v or 'any' }}</option>{% endfor %}</select></div>
+  <div class="field"><label class="small">Search</label><input name="q" value="{{ f.q }}" placeholder="url, title, text"></div>
+  <button class="secondary">Filter</button>
+</form>
+<div class="muted small" style="margin-bottom:6px">{{ total }} link{{ 's' if total != 1 }}</div>
+{% for r in rows %}
+<div class="result">
+  <div class="row between">
+    <a href="{{ r.wayback_url or ('https://web.archive.org/web/*/' ~ r.url) }}" target="_blank">{{ r.url|truncate_url(90) }}</a>
+    {% if r.recovery_status in ('recovered', 'in_corpus') %}· <a class="small" href="{{ local_href(project_id, r.wayback_timestamp or r.first_cited_ts or '', r.url) }}" target="_blank" title="Read the downloaded copy here, without the Wayback Machine">local copy</a>{% endif %}
+    <span class="muted small">{{ r.kind }} · cited by {{ r.cited_by_pages }} · first {{ r.first_cited_ts|fmt_ts }}
+      {% if r.wayback_timestamp %} · captured {{ r.wayback_timestamp|fmt_ts }} ({{ r.capture_distance_days }} d){% endif %}</span>
+  </div>
+  {% if r.title %}<div><b>{{ r.title }}</b></div>{% endif %}
+  {% if r.description %}<div>{{ r.description }}</div>{% endif %}
+  <div class="muted small">
+    {% if r.relation %}<span class="badge">{{ r.relation|replace('_',' ') }}</span> {{ r.relation_note or '' }}{% endif %}
+    {% if r.sample_anchor %} · link text “{{ r.sample_anchor|truncate_url(60) }}”{% endif %}
+    {% if r.error_message %} · <span title="{{ r.error_message }}">{{ r.error_message|truncate_url(60) }}</span>{% endif %}
+    {% if r.analysis_status not in ('not_selected', 'processed') %} · analysis {{ r.analysis_status }}{% endif %}
+  </div>
+</div>
+{% else %}
+<div class="muted">Nothing matches.</div>
+{% endfor %}
+{% if pages > 1 %}
+<div class="row" style="gap:6px;margin-top:8px">
+  {% if page > 1 %}<button class="secondary" hx-get="{{ base }}?scope={{ f.scope }}&kind={{ f.kind }}&status={{ f.status }}&q={{ f.q|urlencode }}&page={{ page - 1 }}" hx-target="#links-table">← Prev</button>{% endif %}
+  <span class="muted small">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<button class="secondary" hx-get="{{ base }}?scope={{ f.scope }}&kind={{ f.kind }}&status={{ f.status }}&q={{ f.q|urlencode }}&page={{ page + 1 }}" hx-target="#links-table">Next →</button>{% endif %}
+</div>
+{% endif %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Logs · Digital Archeology{% endblock %}
+{% block content %}
+<h2>Logs</h2>
+<p class="muted small">What the app did and what went wrong: downloads, analysis runs, link and image
+  recovery, close readings, Wayback Machine requests and crashes, from the web app and from command-line
+  runs alike. Last 24 h: <b style="color:var(--danger)">{{ counts.error }}</b> errors,
+  <b>{{ counts.warning }}</b> warnings. Each page's own failure reason is also kept on the page
+  (“Show failed &amp; skipped” in the project).</p>
+
+<form class="row" style="gap:8px; align-items:flex-end; margin-bottom:10px"
+      hx-get="/_logs" hx-target="#log-rows" hx-trigger="change, keyup changed delay:400ms from:input[name=q]"
+      hx-push-url="false">
+  <div class="field"><label class="small">Level</label>
+    <select name="level">
+      {% for v, label in [('info','Everything'),('warning','Warnings and errors'),('error','Errors only')] %}
+      <option value="{{ v }}" {% if f.level == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></div>
+  <div class="field"><label class="small">Project</label>
+    <select name="project">
+      <option value="">All</option>
+      {% for p in projects %}<option value="{{ p.id }}" {% if f.project == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+    </select></div>
+  <div class="field"><label class="small">Search</label>
+    <input name="q" value="{{ f.q }}" placeholder="url, error text…"></div>
+  <label class="small muted"><input type="checkbox" id="log-live" checked
+    onchange="document.getElementById('log-rows').setAttribute('hx-trigger', this.checked ? 'every 5s' : 'none'); htmx.process(document.getElementById('log-rows'))">
+    refresh every 5 s</label>
+</form>
+
+<div id="log-rows" hx-get="/_logs" hx-include="previous form" hx-trigger="every 5s" hx-swap="innerHTML">
+  {% include "partials/_logs.html" %}
+</div>
+{% endblock %}
