@@ -83,6 +83,13 @@ Open http://localhost:8000. The database, downloads, logs and exports live in
 
 Any server speaking the Ollama API works.
 
+The app only speaks the Ollama API, and that is deliberate: with Ollama the
+whole pipeline can run on your own machine, so the material you recover never
+has to leave it when it should not, and there is no bill. The same API reaches
+Ollama Cloud when you would rather not host the model yourself. For that reason
+no other providers (OpenAI, Anthropic, Gemini, …) are built in. If you need one,
+open an issue: it can be added on request.
+
 - **Local Ollama**: `ollama serve`, `ollama pull <model>`, and leave
   `OLLAMA_HOST=http://host.docker.internal:11434`. Small models (3B) work for
   per-page analysis but write noticeably worse summaries.
