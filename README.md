@@ -11,6 +11,8 @@ the site linked to, close readings of its articles, descriptions of image-only
 pages, a profile of the domain, and a self-contained export that opens in any
 browser with no server.
 
+![Results of a demo project: 45 pages of info.cern.ch, the first website, analyzed with gemma4](docs/screenshots/results.png)
+
 The app is a single FastAPI process with a server-rendered HTMX UI: no
 JavaScript build, no Node, one SQLite database.
 
@@ -132,6 +134,8 @@ more workers only queue. Against ollama.com with `gemma4:31b`, 4 workers gave
 ## Using it
 
 A project's page walks through five steps:
+
+![The five-step workflow of a project](docs/screenshots/workflow.png)
 
 1. **Search the Wayback Machine** for the domain.
 2. **Configure & queue**: dates, frequency, content types (none ticked means
