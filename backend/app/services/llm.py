@@ -395,6 +395,7 @@ based on data recovered from the Internet Archive.
 Domain: {domain}
 Active period (Wayback captures): {first or 'unknown'} to {last or 'unknown'}
 Detected technologies: {', '.join(tech_names) or 'unknown'}
+Registered domain: {whois.get('whois_domain') or domain} ({'currently registered' if whois.get('whois_source') == 'rdap' else 'not currently registered' if whois.get('whois_source') == 'unregistered' else 'registration unknown'})
 Registrar (current WHOIS): {whois.get('registrar') or 'unknown/redacted'}
 Dominant content types: {', '.join(top_content) or 'unknown'}
 Recurring topics: {', '.join(top_subjects) or 'unknown'}

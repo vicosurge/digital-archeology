@@ -98,6 +98,7 @@ async def init_db():
         await _ensure_column(conn, "projects", "scope_end", "VARCHAR(14)")
         await _ensure_column(conn, "projects", "scope_reason", "TEXT")
         await _ensure_column(conn, "projects", "exclude_patterns", "TEXT")
+        await _ensure_column(conn, "archival_cards", "whois_domain", "VARCHAR(255)")
         await _ensure_column(
             conn, "archived_files", "in_scope", "BOOLEAN NOT NULL DEFAULT 1"
         )

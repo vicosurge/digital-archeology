@@ -255,7 +255,8 @@ class ArchivalCard(Base):
     whois_status = Column(JSON)  # ["clientTransferProhibited", ...]
     registrant = Column(JSON)  # {name, org, email, ...} when not redacted
     whois_raw = Column(JSON)  # full RDAP response for reference
-    whois_source = Column(String(50))  # rdap, unavailable, error
+    whois_source = Column(String(50))  # rdap, unregistered, unavailable, error
+    whois_domain = Column(String(255))  # domain looked up (registered parent of a subdomain)
 
     # Technology stack detected from archived HTML
     tech_stack = Column(JSON)  # [{name, category, version, evidence}, ...]
@@ -705,6 +706,7 @@ class ArchivalCardResponse(BaseModel):
     whois_status: Optional[List[str]]
     registrant: Optional[dict]
     whois_source: Optional[str]
+    whois_domain: Optional[str] = None
     tech_stack: Optional[List[dict]]
     timeline: Optional[dict]
     likely_people: Optional[List[dict]]

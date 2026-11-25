@@ -29,6 +29,7 @@ def card_to_dict(card):
         "whois_status": card.whois_status,
         "registrant": card.registrant,
         "whois_source": card.whois_source,
+        "whois_domain": card.whois_domain,
         "tech_stack": card.tech_stack,
         "timeline": card.timeline,
         "likely_people": card.likely_people,

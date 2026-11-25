@@ -795,6 +795,7 @@ async def _build_card(db: AsyncSession, project: Project) -> ArchivalCard:
     card.registrant = whois["registrant"]
     card.whois_raw = whois["whois_raw"]
     card.whois_source = whois["whois_source"]
+    card.whois_domain = whois["whois_domain"]
     card.tech_stack = tech_stack
     card.timeline = timeline
     card.likely_people = people

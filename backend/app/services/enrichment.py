@@ -6,11 +6,48 @@ redacted/GDPR-masked; we still surface registrar, registration/expiry dates,
 nameservers and status. The "who actually ran it" signal comes mostly from people
 mentioned in the archived content (aggregated separately by the LLM/analysis layer).
 """
+import re
+
 import httpx
 from collections import Counter
 from typing import Dict, List, Any, Optional
 
 RDAP_BASE = "https://rdap.org/domain"
+
+# Registries that run RDAP but are missing from IANA's bootstrap, which is all
+# rdap.org consults. For these rdap.org answers "no RDAP service", so they are
+# asked directly.
+_DIRECT_RDAP = {"ch": "https://rdap.nic.ch/domain", "li": "https://rdap.nic.ch/domain"}
+
+# Second-level labels that are public suffixes under a country code
+# (example.co.uk, example.com.au, example.gob.mx). A lookup never stops at one
+# of these: "co.uk" is not anyone's registration.
+_GENERIC_SLDS = {"co", "com", "net", "org", "gov", "gob", "edu", "ac", "mil",
+                 "ne", "or", "go", "nic", "ltd", "plc", "sch", "nom", "info", "biz"}
+
+
+def host_of(domain: str) -> str:
+    """Bare hostname from whatever the project was created with."""
+    d = domain.strip().lower()
+    d = re.sub(r"^[a-z][a-z0-9+.-]*://", "", d)
+    d = d.split("/", 1)[0].split("?", 1)[0].split("@")[-1].split(":", 1)[0]
+    return d.strip(".")
+
+
+def registration_candidates(domain: str) -> List[str]:
+    """The host and each parent down to two labels, most specific first.
+
+    Registries only hold the domain that was registered (cern.ch), not the
+    hosts under it (info.cern.ch), so a lookup walks up until one answers.
+    """
+    labels = [x for x in host_of(domain).split(".") if x]
+    out = []
+    for i in range(len(labels) - 1):
+        cand = labels[i:]
+        if len(cand) == 2 and len(cand[1]) == 2 and cand[0] in _GENERIC_SLDS:
+            break
+        out.append(".".join(cand))
+    return out or [host_of(domain)]
 
 
 def _vcard_to_dict(entity: Dict[str, Any]) -> Dict[str, Optional[str]]:
@@ -44,7 +81,8 @@ def _find_entity(entities: List[Dict[str, Any]], role: str) -> Optional[Dict[str
 async def fetch_rdap(domain: str) -> Dict[str, Any]:
     """Look up current registration data via RDAP. Returns a normalized dict.
 
-    `whois_source` is one of: rdap, unregistered, unavailable, error.
+    `whois_source` is one of: rdap, unregistered, unavailable (the TLD's
+    registry offers no RDAP), error.
 
     "unregistered" is a finding, not a failure. For a dead site it is often the
     most telling field on the card: b1mas4.com returns 404 from the authoritative
@@ -53,7 +91,7 @@ async def fetch_rdap(domain: str) -> Dict[str, Any]:
     would hide it behind what looks like a broken network call.
     """
     # rdap.org redirects to the authoritative registry/registrar RDAP server.
-    url = f"{RDAP_BASE}/{domain}"
+    candidates = registration_candidates(domain)
     result: Dict[str, Any] = {
         "registrar": None,
         "whois_created": None,
@@ -64,20 +102,39 @@ async def fetch_rdap(domain: str) -> Dict[str, Any]:
         "registrant": None,
         "whois_raw": None,
         "whois_source": "unavailable",
+        # The domain the result is about: the registered domain, which for a
+        # site on a subdomain is a parent of the project's domain.
+        "whois_domain": candidates[-1],
     }
 
+    data = None
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            response = await client.get(url, headers={"Accept": "application/rdap+json"})
-        if response.status_code == 404:
-            # The registry is authoritative: no record means the domain is not
-            # currently registered.
-            result["whois_source"] = "unregistered"
-            return result
-        response.raise_for_status()
-        data = response.json()
+            base = _DIRECT_RDAP.get(candidates[-1].rsplit(".", 1)[-1], RDAP_BASE)
+            for cand in candidates:
+                response = await client.get(f"{base}/{cand}",
+                                            headers={"Accept": "application/rdap+json"})
+                if response.status_code == 404:
+                    # rdap.org also says 404 when the TLD has no RDAP server at
+                    # all. That is "unknown", not "unregistered".
+                    if "no rdap service" in response.text[:500].lower():
+                        return result
+                    continue
+                if response.status_code in (400, 422) and cand != candidates[-1]:
+                    # Some registries (SWITCH for .ch) reject a name below the
+                    # registered domain as malformed instead of answering 404.
+                    continue
+                response.raise_for_status()
+                data = response.json()
+                result["whois_domain"] = cand
+                break
     except (httpx.HTTPError, ValueError):
         result["whois_source"] = "error"
+        return result
+    if data is None:
+        # The registry is authoritative: no record for the host or any of its
+        # parents means the registered domain is not currently registered.
+        result["whois_source"] = "unregistered"
         return result
 
     result["whois_source"] = "rdap"

@@ -20,6 +20,13 @@
     {# ---- Ownership ---- #}
     <div class="panel" style="flex:1; min-width:300px">
       <h2>Ownership (WHOIS / RDAP)</h2>
+      {% set host = card.whois_domain and project.domain|lower|replace('https://','')|replace('http://','')|trim('/') %}
+      {% if card.whois_domain and card.whois_domain != host %}
+        <div class="muted small" style="margin-bottom:8px">
+          Registration of <b>{{ card.whois_domain }}</b>: {{ host }} is a subdomain
+          of it, and registries only hold the registered domain.
+        </div>
+      {% endif %}
       {% if card.whois_source == 'rdap' %}
         <table class="summary">
           <tr><td class="k">Registrar</td><td>{{ card.registrar or '—' }}</td></tr>
@@ -45,14 +52,17 @@
            stated as a result rather than shown as a missing value. #}
         <div><b>Not currently registered.</b></div>
         <div class="muted small" style="margin-top:6px">
-          The authoritative registry has no record for this domain — it is
+          The authoritative registry has no record for
+          {{ card.whois_domain or 'this domain' }}: it is
           unregistered as of the date this card was generated. Whatever the
           archived captures show, nobody holds it now.
         </div>
       {% elif card.whois_source == 'error' %}
         <div class="muted">RDAP lookup failed (network or server error).</div>
       {% else %}
-        <div class="muted">No RDAP record found for this domain.</div>
+        <div class="muted">Ownership unknown: the registry for
+          {{ card.whois_domain or 'this domain' }} does not publish registration
+          data through RDAP, so it cannot be looked up here.</div>
       {% endif %}
     </div>
 
