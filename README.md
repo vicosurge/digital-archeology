@@ -146,6 +146,8 @@ A project's page walks through five steps:
    that did not make it and why. *Retry* requeues the failures.
 5. **Explore**: results, the archival card, research views, export.
 
+![The archival card of the demo project: summary, ownership of the registered domain, and people named in the pages](docs/screenshots/card.png)
+
 Long jobs can also run from the command line, which keeps going without a
 browser tab:
 
