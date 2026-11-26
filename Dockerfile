@@ -2,7 +2,7 @@
 # Single-stage Python image. The UI is server-rendered (HTMX + Jinja2),
 # so there is no Node/Vite build step.
 
-FROM python:3.12.16-slim
+FROM python:3.15.1-slim
 
 WORKDIR /app
 
