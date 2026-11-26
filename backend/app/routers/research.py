@@ -5,28 +5,37 @@ archive. Long jobs (link recovery, link analysis) run as background tasks and
 the status fragment polls while any is running.
 """
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import ArchivalCard
-from ..services import apparatus, archive_export
+from ..models import ArchivalCard, Project, ProjectStatus
+from ..services import apparatus, archive_export, estimate, linked_sites, memento, takeover, warc_export
 from ..services.findings import build_findings
 from ..services.links import link_service
 from ..services.reading import GENRES, INTENTS, STANCES, reading_service
 from ..services.themes import compute_themes, sentiment_shift
-from .web import _get_project, _render
+from .web import _get_project, _is_active, _render
+
+log = logging.getLogger("app.research")
 
 router = APIRouter(tags=["research"])
 
 LINK_KIND_ORDER = ["reference", "article", "document", "sitewide", "social", "newsletter",
                    "advertising", "navigation", "taxonomy", "media", "download", "other"]
+
+
+async def _estimate_line(db: AsyncSession, project_id: int, job: str) -> str:
+    project = await db.get(Project, project_id)
+    model = project.ollama_model if project else None
+    return estimate.describe(await estimate.estimate(db, project_id, job, model))
 
 
 async def _links_context(db: AsyncSession, project_id: int) -> dict:
@@ -51,6 +60,11 @@ async def _links_context(db: AsyncSession, project_id: int) -> dict:
         "AND error_message LIKE 'unconfirmed%'"), {"pid": project_id})).scalar() or 0
 
     jobs = {k: link_service.job(project_id, k) for k in ("extract", "recover", "analyze")}
+    jobs["memento"] = memento.job(project_id)
+    by_archive = dict((await db.execute(text(
+        "SELECT source_archive, COUNT(*) FROM link_targets WHERE project_id = :pid "
+        "AND recovery_status = 'recovered' AND source_archive IS NOT NULL GROUP BY 1"),
+        {"pid": project_id})).fetchall())
     to_recover = recovery.get("pending", 0)
     done_recover = recovery.get("recovered", 0) + recovery.get("not_archived", 0) + recovery.get("error", 0)
     to_analyze = analysis.get("pending", 0)
@@ -60,9 +74,11 @@ async def _links_context(db: AsyncSession, project_id: int) -> dict:
         "kinds": sorted(kinds.items(), key=lambda kv: (kv[0][0], LINK_KIND_ORDER.index(kv[0][1])
                                                         if kv[0][1] in LINK_KIND_ORDER else 99)),
         "recovery": recovery, "analysis": analysis, "unconfirmed": unconfirmed,
+        "memento_pending": await memento.pending(db, project_id), "by_archive": by_archive,
         "recover_pct": int(100 * done_recover / (done_recover + to_recover)) if (done_recover + to_recover) else 0,
         "analyze_pct": int(100 * done_analyze / (done_analyze + to_analyze)) if (done_analyze + to_analyze) else 0,
         "jobs": jobs, "any_running": any(j.running for j in jobs.values()),
+        "estimate": await _estimate_line(db, project_id, "links") if to_analyze else "",
     }
 
 
@@ -70,18 +86,23 @@ async def _card(db: AsyncSession, project_id: int) -> Optional[ArchivalCard]:
     return (await db.execute(select(ArchivalCard).where(ArchivalCard.project_id == project_id))).scalar_one_or_none()
 
 
-def _export_context(project) -> dict:
-    path = archive_export.latest_export(project)
+def _file_info(path: Optional[str]) -> Optional[dict]:
     if not path:
-        return {"export": None}
+        return None
     stat = os.stat(path)
-    return {"export": {"name": os.path.basename(path), "size_mb": round(stat.st_size / 1048576, 1),
-                       "built_at": datetime.fromtimestamp(stat.st_mtime)}}
+    return {"name": os.path.basename(path), "size_mb": round(stat.st_size / 1048576, 1),
+            "built_at": datetime.fromtimestamp(stat.st_mtime)}
 
 
-async def _reading_context(project_id: int) -> dict:
+def _export_context(project) -> dict:
+    return {"export": _file_info(archive_export.latest_export(project)),
+            "warc": _file_info(warc_export.latest_warc(project))}
+
+
+async def _reading_context(project_id: int, db: Optional[AsyncSession] = None) -> dict:
     stats = await reading_service.stats(project_id)
-    return {**stats, "job": reading_service.job(project_id)}
+    line = await _estimate_line(db, project_id, "readings") if db is not None else ""
+    return {**stats, "job": reading_service.job(project_id), "estimate": line}
 
 
 @router.get("/project/{project_id}/research", response_class=HTMLResponse)
@@ -92,8 +113,94 @@ async def page_research(project_id: int, request: Request, db: AsyncSession = De
     return _render(request, "research.html", {
         "project": project, "themes": themes, "shift": sentiment_shift(themes["years"]),
         "card": card, "links": await _links_context(db, project_id),
-        "reading": await _reading_context(project_id), **_export_context(project),
+        "reading": await _reading_context(project_id, db), **_export_context(project),
     })
+
+
+# ----- the period under study: takeover detection and scope -----
+def _ts(value: str) -> Optional[str]:
+    """'2017-06-17' or a 14-digit timestamp -> 14 digits, or None."""
+    digits = "".join(c for c in (value or "") if c.isdigit())
+    if not digits:
+        return None
+    if len(digits) < 8:
+        raise HTTPException(status_code=400, detail="Dates need at least YYYY-MM-DD")
+    return digits[:14].ljust(14, "0")
+
+
+async def _scope_context(db: AsyncSession, project: Project, message: str = "") -> dict:
+    result = await takeover.detect_cached(db, project.id)
+    proposal = result["proposal"]
+    # Any end between the last good capture and the proposed one selects the
+    # same captures, so it agrees with the proposal.
+    applied = bool(proposal and project.scope_end
+                   and (proposal.get("last_good") or "") < project.scope_end <= proposal["scope_end"])
+    return {"project": project, "years": result["years"], "proposal": proposal,
+            "applied": applied, "message": message}
+
+
+@router.get("/project/{project_id}/_takeover", response_class=HTMLResponse)
+async def takeover_fragment(project_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    project = await _get_project(db, project_id)
+    return _render(request, "partials/_takeover.html", await _scope_context(db, project))
+
+
+@router.post("/project/{project_id}/scope", response_class=HTMLResponse)
+async def scope_action(project_id: int, request: Request, action: str = Form("apply"),
+                       scope_start: str = Form(""), scope_end: str = Form(""),
+                       scope_reason: str = Form(""), db: AsyncSession = Depends(get_db)):
+    from .projects import apply_scope
+    from ..services.llm import llm_service
+    project = await _get_project(db, project_id)
+    running = _is_active(project) or (await llm_service.get_progress(project_id)).get("running")
+    if running:
+        return _render(request, "partials/_takeover.html", await _scope_context(
+            db, project, "A download or analysis is running. Stop it before changing the scope."))
+    if action == "clear":
+        project.scope_start = project.scope_end = project.scope_reason = None
+    else:
+        start, end = _ts(scope_start), _ts(scope_end)
+        if start and end and start >= end:
+            raise HTTPException(status_code=400, detail="The start must come before the end")
+        project.scope_start, project.scope_end = start, end
+        project.scope_reason = scope_reason.strip() or None
+    counts = await apply_scope(db, project)
+    message = (f"Scope cleared: all {counts['in_scope']:,} captures are in scope." if action == "clear" else
+               f"Scope applied: {counts['in_scope']:,} captures in scope, {counts['excluded']:,} kept aside.")
+    return _render(request, "partials/_takeover.html", await _scope_context(db, project, message))
+
+
+# ----- following the links to other sites -----
+@router.get("/project/{project_id}/_linked-sites", response_class=HTMLResponse)
+async def linked_sites_fragment(project_id: int, request: Request, platforms: bool = Query(False),
+                                db: AsyncSession = Depends(get_db)):
+    await _get_project(db, project_id)
+    sites = await linked_sites.summary(db, project_id, limit=500)
+    shown = [s for s in sites if platforms or not s["platform"]][:60]
+    return _render(request, "partials/_linked_sites.html", {
+        "project_id": project_id, "sites": shown, "platforms": platforms,
+        "hidden_platforms": sum(1 for s in sites if s["platform"]) if not platforms else 0,
+    })
+
+
+@router.post("/project/{project_id}/follow", response_class=HTMLResponse)
+async def follow_site(project_id: int, site: str = Form(...), db: AsyncSession = Depends(get_db)):
+    """Start a project on a linked site, or open the one that exists."""
+    source = await _get_project(db, project_id)
+    site = linked_sites.site_of(site)
+    if not site or "." not in site:
+        raise HTTPException(status_code=400, detail="Not a site")
+    existing = await linked_sites.existing_project(db, site)
+    if existing:
+        return Response(status_code=204, headers={"HX-Redirect": f"/project/{existing}"})
+    project = Project(name=site, domain=site, ollama_model=source.ollama_model,
+                      status=ProjectStatus.CREATED, source_project_id=source.id)
+    db.add(project)
+    await db.commit()
+    await db.refresh(project)
+    log.info("Started project %d on %s from the links of project %d", project.id, site, source.id,
+             extra={"project_id": project.id})
+    return Response(status_code=204, headers={"HX-Redirect": f"/project/{project.id}"})
 
 
 # ----- close reading -----
@@ -101,7 +208,7 @@ async def page_research(project_id: int, request: Request, db: AsyncSession = De
 async def reading_status(project_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     project = await _get_project(db, project_id)
     return _render(request, "partials/_reading_status.html",
-                   {"project": project, "reading": await _reading_context(project_id)})
+                   {"project": project, "reading": await _reading_context(project_id, db)})
 
 
 @router.post("/project/{project_id}/reading/{action}", response_class=HTMLResponse)
@@ -122,7 +229,7 @@ async def reading_action(project_id: int, action: str, request: Request,
     else:
         raise HTTPException(status_code=404, detail="Unknown action")
     return _render(request, "partials/_reading_status.html",
-                   {"project": project, "reading": await _reading_context(project_id), "info": info})
+                   {"project": project, "reading": await _reading_context(project_id, db), "info": info})
 
 
 @router.get("/project/{project_id}/_apparatus", response_class=HTMLResponse)
@@ -196,6 +303,10 @@ async def links_action(project_id: int, action: str, request: Request,
         link_service.start_recover(project_id, limit=max(0, limit))
     elif action == "analyze":
         link_service.start_analyze(project_id, limit=max(0, limit))
+    elif action == "memento":
+        memento.start_links(project_id, limit=max(0, limit))
+    elif action == "stop-memento":
+        memento.stop_links(project_id)
     elif action in ("stop-extract", "stop-recover", "stop-analyze"):
         link_service.stop(project_id, action.split("-", 1)[1])
     elif action in ("requeue-unconfirmed", "requeue-errors", "requeue-analysis_errors"):
@@ -233,7 +344,7 @@ async def links_table(project_id: int, request: Request,
     rows = (await db.execute(text(f"""
         SELECT id, url, domain, kind, cited_by_pages, first_cited_ts, wayback_timestamp, wayback_url,
                capture_distance_days, recovery_status, analysis_status, title, description,
-               relation, relation_note, sample_anchor, error_message
+               relation, relation_note, sample_anchor, error_message, source_archive
         FROM link_targets WHERE {where}
         ORDER BY cited_by_pages DESC, id LIMIT :limit OFFSET :offset
     """), {**params, "limit": per_page, "offset": (page - 1) * per_page})).mappings().all()
@@ -279,6 +390,32 @@ async def action_export(project_id: int, request: Request, include_captures: str
         error = f"{type(exc).__name__}: {exc}"
     return _render(request, "partials/_export.html", {"project": project, "error": error,
                                                       **_export_context(project)})
+
+
+@router.post("/project/{project_id}/warc", response_class=HTMLResponse)
+async def action_warc(project_id: int, request: Request, all_captures: str = Form(""),
+                      db: AsyncSession = Depends(get_db)):
+    project = await _get_project(db, project_id)
+    error = info = None
+    try:
+        r = await warc_export.build_warc(db, project, all_captures=all_captures == "1")
+        info = f"WARC written: {r['resource']:,} captures and {r['metadata']:,} analyses."
+        if r["missing"]:
+            info += f" {r['missing']:,} files were missing on disk and left out."
+        log.info(info, extra={"project_id": project_id})
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+    return _render(request, "partials/_export.html", {"project": project, "error": error, "info": info,
+                                                      **_export_context(project)})
+
+
+@router.get("/project/{project_id}/warc/download")
+async def warc_download(project_id: int, db: AsyncSession = Depends(get_db)):
+    project = await _get_project(db, project_id)
+    path = warc_export.latest_warc(project)
+    if not path:
+        raise HTTPException(status_code=404, detail="No WARC has been built yet")
+    return FileResponse(path, media_type="application/warc", filename=os.path.basename(path))
 
 
 @router.get("/project/{project_id}/export/download")

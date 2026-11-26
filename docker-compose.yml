@@ -31,6 +31,12 @@ services:
       # run until the endpoint's quota is exhausted.
       - LLM_STOP_AT_SESSION_USAGE=${LLM_STOP_AT_SESSION_USAGE:-0}
       - LLM_MAX_CALLS_PER_RUN=${LLM_MAX_CALLS_PER_RUN:-0}
+      # Cost estimate shown before runs (dollars per million tokens; 0 = tokens only)
+      - LLM_PRICE_INPUT_PER_MTOK=${LLM_PRICE_INPUT_PER_MTOK:-0}
+      - LLM_PRICE_OUTPUT_PER_MTOK=${LLM_PRICE_OUTPUT_PER_MTOK:-0}
+      # Optional password for the web UI. Empty = no login.
+      - DA_PASSWORD=${DA_PASSWORD:-}
+      - DA_USERNAME=${DA_USERNAME:-archive}
       # Matches the ./data volume mount below.
       - DA_DATA_DIR=/app/data
     extra_hosts:

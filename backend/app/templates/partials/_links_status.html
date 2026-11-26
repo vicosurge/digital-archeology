@@ -45,6 +45,21 @@
         <button class="secondary" hx-post="/project/{{ project.id }}/links/requeue-errors" hx-target="#links-status" hx-swap="innerHTML">Retry {{ L.recovery.error }} errors</button>
         {% endif %}
       {% endif %}
+      {% set m = L.jobs.memento %}
+      <div style="margin-top:10px;border-top:1px solid var(--border, #2a2f3a);padding-top:8px">
+        <div class="kv small"><b>Other archives</b> (Archive-It, Arquivo.pt)
+          {% if L.by_archive %} · {% for a, n in L.by_archive.items() %}<b>{{ n }}</b> from {{ a }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}</div>
+        {% if m.running %}
+          <div class="muted small">{{ m.done }} / {{ m.total }} asked · {{ m.message or '' }} {{ m.current|truncate_url(40) if m.current }}</div>
+          <button class="danger" hx-post="/project/{{ project.id }}/links/stop-memento" hx-target="#links-status" hx-swap="innerHTML">Stop</button>
+        {% else %}
+          {% if m.outcome %}<div class="muted small">Last run {{ m.outcome }}: {{ m.message or '' }}</div>{% endif %}
+          {% if L.memento_pending %}
+          <button class="secondary" title="Ask other web archives for the links the Wayback Machine never captured (no AI, about 2 s per link)"
+                  hx-post="/project/{{ project.id }}/links/memento" hx-target="#links-status" hx-swap="innerHTML">Ask other archives for {{ L.memento_pending }} links</button>
+          {% endif %}
+        {% endif %}
+      </div>
     </div>
 
     {% set j = L.jobs.analyze %}
@@ -66,6 +81,7 @@
           <input type="number" name="limit" value="{{ [L.analysis.pending, 100]|min }}" min="1" max="{{ L.analysis.pending }}" style="width:80px">
           <button>AI calls</button>
         </form>
+        {% if L.estimate %}<div class="muted small">{{ L.estimate }} (all {{ L.analysis.pending }} waiting)</div>{% endif %}
         {% endif %}
         {% if L.analysis.error %}
         <button class="secondary" hx-post="/project/{{ project.id }}/links/requeue-analysis_errors" hx-target="#links-status" hx-swap="innerHTML">Retry {{ L.analysis.error }} errors</button>

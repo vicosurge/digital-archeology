@@ -3,13 +3,15 @@
 {% block title %}People{% endblock %}
 {% block content %}
 <h1>People named on the site</h1>
-<p class="muted">Names the AI identified across the analyzed pages, most frequently named first. Names are not
-  disambiguated: the same person may appear under variants, and different people may share a name.</p>
+<p class="muted">Names the AI identified across the analyzed pages, most frequently named first. Spellings that
+  differ only in case, accents or hyphens are one entry; a shorter name is merged into a fuller one only when it
+  fits exactly one (e.g. a surname alone); any further merges were made by hand and are listed as variants.
+  Different people may still share a name.</p>
 <div class="table-wrap"><table>
   <tr><th>Name</th><th>Pages</th><th>Where</th></tr>
   {% for p in people %}
   <tr id="{{ p.name|lower|replace(' ', '-') }}">
-    <td>{{ p.name }}</td><td>{{ p.pages|length }}</td>
+    <td>{{ p.name }}{% if p.variants and p.variants|length > 1 %}<div class="small muted">also: {{ p.variants|reject('equalto', p.name)|join(', ') }}</div>{% endif %}</td><td>{{ p.pages|length }}</td>
     <td class="small">{% for pid in p.pages[:30] %}<a href="pages.html#{{ pid }}">{{ pid }}</a>{{ ', ' if not loop.last }}{% endfor %}{% if p.pages|length > 30 %} … and {{ p.pages|length - 30 }} more{% endif %}</td>
   </tr>
   {% endfor %}

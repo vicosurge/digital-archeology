@@ -1,0 +1,21 @@
+{% macro d(ts) %}{{ ts[:4] }}{% if ts[4:6] %}-{{ ts[4:6] }}{% endif %}{% endmacro %}
+{% if not sites %}
+  <div class="muted small">No outbound links yet. Run “Find the links” above first.</div>
+{% else %}
+<table class="summary history small">
+  <tr><th>Site</th><th>Pages linking</th><th>Linked pages</th><th>Recovered</th><th>Cited</th><th></th></tr>
+  {% for s in sites %}
+  <tr>
+    <td>{{ s.site }}{% if s.platform %} <span class="badge" title="An account on a shared platform, not a site of its own">platform</span>{% endif %}</td>
+    <td>{{ s.pages }}</td><td>{{ s.targets }}</td><td>{{ s.recovered }}</td>
+    <td class="muted">{% if s.first %}{{ d(s.first) }}{% if s.last and s.last[:6] != s.first[:6] %} – {{ d(s.last) }}{% endif %}{% endif %}</td>
+    <td>
+      {% if s.project_id %}<a class="small" href="/project/{{ s.project_id }}">open project</a>
+      {% elif not s.platform %}<button class="secondary small" hx-post="/project/{{ project_id }}/follow" hx-vals='{"site": {{ s.site|tojson }}}'
+          hx-confirm="Create a project for {{ s.site }}? Nothing is searched until you run it.">Start project</button>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% if hidden_platforms %}<a class="small" hx-get="/project/{{ project_id }}/_linked-sites?platforms=true" hx-target="#linked-sites" hx-swap="innerHTML">Show {{ hidden_platforms }} social and service platforms too</a>{% endif %}
+{% endif %}

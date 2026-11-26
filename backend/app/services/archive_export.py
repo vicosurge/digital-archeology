@@ -153,6 +153,8 @@ async def gather(db: AsyncSession, project: Project) -> Dict[str, Any]:
 
     pages = []
     people_index: Dict[str, Dict[str, Any]] = {}
+    from .people import canonicalizer
+    canon = await canonicalizer(db, pid)
     for r in page_rows:
         page = {
             "id": f"P{r[0]}", "file_id": r[0], "url": r[1], "timestamp": r[2],
@@ -167,15 +169,21 @@ async def gather(db: AsyncSession, project: Project) -> Dict[str, Any]:
         }
         page["raw_file"] = _raw_name("site", r[0], r[4] or "", r[3]) if r[4] else None
         pages.append(page)
-        for name in page["people"]:
-            entry = people_index.setdefault(name.lower(), {"name": name, "pages": []})
-            entry["pages"].append(page["id"])
+        for raw in page["people"]:
+            if not person_to_str(raw):
+                continue
+            k = canon.canonical(raw)
+            entry = people_index.setdefault(k, {"name": canon.display(k), "pages": [],
+                                                "variants": canon.variants(k)})
+            if page["id"] not in entry["pages"]:
+                entry["pages"].append(page["id"])
 
     link_rows = (await db.execute(text("""
         SELECT id, url, domain, is_internal, kind, cited_by_pages, first_cited_ts, last_cited_ts,
                sample_anchor, recovery_status, wayback_timestamp, capture_distance_days, mimetype,
                local_path, analysis_status, title, description, content_type, sentiment,
-               subjects, tags, people_mentioned, relation, relation_note, model_used
+               subjects, tags, people_mentioned, relation, relation_note, model_used,
+               source_archive, wayback_url
         FROM link_targets
         WHERE project_id = :pid
           AND (kind IN ('reference', 'article', 'document', 'sitewide')
@@ -220,7 +228,10 @@ async def gather(db: AsyncSession, project: Project) -> Dict[str, Any]:
             "cited_by_pages": r[5], "first_cited": _fmt_ts(r[6]), "last_cited": _fmt_ts(r[7]),
             "anchor": r[8], "recovery_status": r[9], "capture_date": _fmt_ts(r[10]),
             "capture_distance_days": r[11], "mimetype": r[12],
-            "wayback_url": wayback_view_url(r[10], r[1]) if recovered else wayback_view_url(None, r[1]),
+            # A copy from another archive (services/memento.py) cites that archive.
+            "wayback_url": (r[26] if r[25] and r[26] else
+                            wayback_view_url(r[10], r[1]) if recovered else wayback_view_url(None, r[1])),
+            "source_archive": r[25] or ("Wayback Machine" if recovered else None),
             "local_path": r[13], "analysis_status": r[14], "title": r[15], "description": r[16],
             "content_type": r[17], "sentiment": r[18], "subjects": _json_list(r[19]),
             "tags": _json_list(r[20]), "people": _json_list(r[21]), "relation": r[22],
@@ -489,7 +500,8 @@ def write_bag(data: Dict[str, Any], include_captures: bool = True) -> str:
                  "sentiment_score", "subjects", "tags", "people", "description", "estimated_date",
                  "date_confidence", "captures", "model", "raw_file"]
     link_cols = ["id", "url", "domain", "scope", "kind", "cited_by_pages", "first_cited", "last_cited",
-                 "anchor", "recovery_status", "capture_date", "capture_distance_days", "wayback_url",
+                 "anchor", "recovery_status", "source_archive", "capture_date", "capture_distance_days",
+                 "wayback_url",
                  "title", "description", "content_type", "sentiment", "relation", "relation_note",
                  "subjects", "tags", "people", "model", "raw_file"]
     files["pages.csv"] = _csv(data["pages"], page_cols)

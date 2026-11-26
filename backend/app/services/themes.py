@@ -67,7 +67,16 @@ async def compute_themes(db: AsyncSession, project_id: int) -> Dict[str, Any]:
         content_by_year.setdefault(yr, []).append((ctype, int(n)))
 
     subjects = await _top_json_values(db, project_id, "subjects", 10)
-    people = await _top_json_values(db, project_id, "people_mentioned", 10, _PERSON_VALUE)
+    # People per year, with spellings of one person merged (services/people.py).
+    from .people import canonicalizer
+    canon = await canonicalizer(db, project_id)
+    people: Dict[str, List[tuple]] = {}
+    for yr, entries in (await _top_json_values(db, project_id, "people_mentioned", 10_000,
+                                               _PERSON_VALUE)).items():
+        merged: Counter = Counter()
+        for value, n in entries:
+            merged[canon.canonical(value)] += n
+        people[yr] = [(canon.display(k), n) for k, n in merged.most_common(10)]
 
     # Which outside sites the site pointed to each year (from recovered links'
     # citations; a citation is dated by the citing capture).

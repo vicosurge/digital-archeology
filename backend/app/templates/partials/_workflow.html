@@ -198,6 +198,9 @@
                 {% elif done %}Continue analysis
                 {% else %}Start analysis{% endif %}</button>
             </form>
+            {% if analysis_estimate %}
+              <div class="muted small" style="flex-basis:100%">{{ analysis_estimate }} · for {{ project.ollama_model }}</div>
+            {% endif %}
             {% if processing.errors %}
               <button class="ghost" hx-post="/project/{{ project.id }}/retry-failed-processing"
                       hx-target="#workflow" hx-swap="outerHTML">

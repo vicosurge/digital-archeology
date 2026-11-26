@@ -1,4 +1,5 @@
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+{% if info %}<div class="notice info">{{ info }}</div>{% endif %}
 <div class="row between" style="align-items:center">
   <div>
     {% if export %}
@@ -11,5 +12,20 @@
   <form hx-post="/project/{{ project.id }}/export" hx-target="#export" hx-swap="innerHTML" class="row" style="gap:8px;align-items:center">
     <label class="small"><input type="checkbox" name="include_captures" value="1" checked> include raw captures</label>
     <button>{{ 'Rebuild archive' if export else 'Build archive' }}<span class="spinner"> — packaging…</span></button>
+  </form>
+</div>
+
+<div class="row between" style="align-items:center;margin-top:12px">
+  <div>
+    {% if warc %}
+      <a class="btn ghost" href="/project/{{ project.id }}/warc/download">Download {{ warc.name }}</a>
+      <span class="muted small">{{ warc.size_mb }} MB · built {{ warc.built_at.strftime('%Y-%m-%d %H:%M') }}</span>
+    {% else %}
+      <span class="muted small">WARC (ISO 28500) of the held captures, for pywb, ReplayWeb.page and other archives.</span>
+    {% endif %}
+  </div>
+  <form hx-post="/project/{{ project.id }}/warc" hx-target="#export" hx-swap="innerHTML" class="row" style="gap:8px;align-items:center">
+    <label class="small"><input type="checkbox" name="all_captures" value="1"> include out-of-scope captures</label>
+    <button class="secondary">{{ 'Rebuild WARC' if warc else 'Build WARC' }}<span class="spinner"> — writing…</span></button>
   </form>
 </div>

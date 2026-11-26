@@ -17,7 +17,8 @@
     <a href="{{ r.wayback_url or ('https://web.archive.org/web/*/' ~ r.url) }}" target="_blank">{{ r.url|truncate_url(90) }}</a>
     {% if r.recovery_status in ('recovered', 'in_corpus') %}· <a class="small" href="{{ local_href(project_id, r.wayback_timestamp or r.first_cited_ts or '', r.url) }}" target="_blank" title="Read the downloaded copy here, without the Wayback Machine">local copy</a>{% endif %}
     <span class="muted small">{{ r.kind }} · cited by {{ r.cited_by_pages }} · first {{ r.first_cited_ts|fmt_ts }}
-      {% if r.wayback_timestamp %} · captured {{ r.wayback_timestamp|fmt_ts }} ({{ r.capture_distance_days }} d){% endif %}</span>
+      {% if r.wayback_timestamp %} · captured {{ r.wayback_timestamp|fmt_ts }} ({{ r.capture_distance_days }} d){% endif %}
+      {% if r.source_archive %} · <span class="badge" title="Not in the Wayback Machine; recovered from another web archive">{{ r.source_archive }}</span>{% endif %}</span>
   </div>
   {% if r.title %}<div><b>{{ r.title }}</b></div>{% endif %}
   {% if r.description %}<div>{{ r.description }}</div>{% endif %}

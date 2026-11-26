@@ -16,6 +16,11 @@ Inside the container:
     python -m app.cli img-describe  --project 5 [--limit 50]   # vision model
     python -m app.cli img-requeue   --project 5 --which errors|describe_errors
     python -m app.cli img-stats     --project 5
+    python -m app.cli links-memento --project 4 [--limit 50]   # other web archives, no AI
+    python -m app.cli img-memento   --project 5 [--limit 50]
+    python -m app.cli estimate      --project 4   # calls and tokens each AI job would use
+    python -m app.cli search-index  --project 4   # full-text index of the held pages
+    python -m app.cli warc          --project 4 [--all]        # WARC of the held captures
 
 Run these against the same database as the web app only while that app is not
 running the same job, the in-memory job registry is per process.
@@ -54,16 +59,35 @@ async def _stats(project_id: int) -> dict:
     }
 
 
+async def _estimate(project_id: int) -> dict:
+    """What each LLM job would cost if run now over everything queued."""
+    from .database import async_session_maker
+    from .models import Project
+    from .services import estimate
+    out = {}
+    async with async_session_maker() as db:
+        project = await db.get(Project, project_id)
+        model = project.ollama_model if project else None
+        for job in estimate.JOBS:
+            e = await estimate.estimate(db, project_id, job, model)
+            out[job] = {**e, "summary": estimate.describe(e) or "nothing queued"}
+    return out
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     parser.add_argument("command", choices=["links-extract", "links-recover", "links-analyze",
                                             "links-requeue", "links-stats",
                                             "read-select", "read-run", "read-requeue", "read-stats",
                                             "comments", "img-select", "img-recover",
-                                            "img-describe", "img-requeue", "img-stats"])
+                                            "img-describe", "img-requeue", "img-stats",
+                                            "estimate", "search-index", "warc",
+                                            "links-memento", "img-memento"])
     parser.add_argument("--project", type=int, required=True)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--which", default="unconfirmed")
+    parser.add_argument("--all", action="store_true",
+                        help="warc: include out-of-scope captures too")
     args = parser.parse_args()
 
     from .services import applog
@@ -110,6 +134,23 @@ async def main() -> None:
             result = {"requeued": await image_service.requeue(args.project, args.which)}
         elif args.command == "img-stats":
             result = await image_service.stats(args.project)
+        elif args.command == "links-memento":
+            from .services.memento import recover_links
+            result = await recover_links(args.project, state, args.limit)
+        elif args.command == "img-memento":
+            from .services.memento import recover_images
+            result = await recover_images(args.project, state, args.limit)
+        elif args.command == "warc":
+            from .database import async_session_maker
+            from .models import Project
+            from .services.warc_export import build_warc
+            async with async_session_maker() as db:
+                result = await build_warc(db, await db.get(Project, args.project), all_captures=args.all)
+        elif args.command == "search-index":
+            from .services.search_index import index_project
+            result = await index_project(args.project)
+        elif args.command == "estimate":
+            result = await _estimate(args.project)
         elif args.command == "read-requeue":
             result = {"requeued": await reading_service.requeue(args.project, args.which)}
         else:

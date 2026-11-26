@@ -94,6 +94,9 @@ class LLMConfig:
         out = str(text)
         if self.api_key:
             out = out.replace(self.api_key, "***")
+        password = os.environ.get("DA_PASSWORD", "").strip()
+        if password:
+            out = out.replace(password, "***")
         if self.base_url and self.base_url != self.safe_base_url():
             out = out.replace(self.base_url, self.safe_base_url())
         return out
@@ -129,6 +132,24 @@ def load_llm_config() -> LLMConfig:
         max_calls_per_run=max(0, _env_int("LLM_MAX_CALLS_PER_RUN", 0)),
         stop_at_session_usage=max(0.0, min(1.0, _env_float("LLM_STOP_AT_SESSION_USAGE", 0.0))),
     )
+
+
+def get_prices() -> tuple:
+    """(input, output) dollars per million tokens; (0, 0) when not configured."""
+    return (max(0.0, _env_float("LLM_PRICE_INPUT_PER_MTOK", 0.0)),
+            max(0.0, _env_float("LLM_PRICE_OUTPUT_PER_MTOK", 0.0)))
+
+
+def get_auth() -> Optional[tuple]:
+    """(username, password) when the UI is password-protected, else None.
+
+    Read on each request, like the LLM settings. Set DA_PASSWORD whenever anyone
+    but you can reach the port: without it the app has no login at all.
+    """
+    password = os.environ.get("DA_PASSWORD", "").strip()
+    if not password:
+        return None
+    return _env_str("DA_USERNAME", "archive"), password
 
 
 def get_llm_config() -> LLMConfig:

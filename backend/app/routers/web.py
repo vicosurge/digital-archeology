@@ -22,7 +22,8 @@ from ..models import (
 from ..services.wayback import wayback_service
 from ..services.downloader import download_service
 from ..services.llm import llm_service
-from ..services import applog, enrichment, exclusions, local_view
+from ..services import applog, enrichment, estimate, exclusions, history, local_view, search_index
+from ..services import people as people_service
 from ..services.techstack import techstack_detector
 from .projects import (
     sync_project_counts, reconcile_project_status, reset_failed_processing, apply_scope,
@@ -31,6 +32,7 @@ from ..config import get_llm_config, resolve_local_path
 
 import asyncio
 import logging
+from collections import Counter
 
 log = logging.getLogger("app.web")
 
@@ -131,9 +133,14 @@ async def _workflow_context(db: AsyncSession, project: Project) -> dict:
         .where(ArchivedFile.error_message.like("Archive only holds an error page%")
                | ArchivedFile.error_message.like("Redirect target was never archived%"))
     )).scalar() or 0
+    analysis_estimate = ""
+    if not proc.get("running"):
+        analysis_estimate = estimate.describe(
+            await estimate.estimate(db, project.id, "analysis", project.ollama_model))
     return {
         "project": project,
         "active": active,
+        "analysis_estimate": analysis_estimate,
         "archive_error_pages": archive_error_pages,
         "download": dl,
         "processing": proc,
@@ -198,12 +205,14 @@ async def page_index(request: Request, db: AsyncSession = Depends(get_db)):
 async def page_detail(project_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     project = await _get_project(db, project_id)
     ctx = await _workflow_context(db, project)
+    if project.source_project_id:
+        ctx["source_project"] = await db.get(Project, project.source_project_id)
     return _render(request, "project_detail.html", ctx)
 
 
 @router.get("/project/{project_id}/results", response_class=HTMLResponse)
 async def page_results(project_id: int, request: Request, scope: str = Query("site"),
-                       db: AsyncSession = Depends(get_db)):
+                       person: str = Query(""), db: AsyncSession = Depends(get_db)):
     project = await _get_project(db, project_id)
     if scope not in _SCOPE_CHOICES:
         scope = "site"
@@ -212,6 +221,7 @@ async def page_results(project_id: int, request: Request, scope: str = Query("si
         "project": project,
         "stats": stats,
         "scope": scope,
+        "person": person,
         "scope_counts": await _scope_counts(db, project_id),
     })
 
@@ -245,6 +255,7 @@ async def create_project(
 @router.post("/project/{project_id}/delete", response_class=HTMLResponse)
 async def delete_project(project_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     project = await _get_project(db, project_id)
+    await search_index.delete_project(db, project_id)
     await db.delete(project)
     await db.commit()
     result = await db.execute(select(Project).order_by(Project.created_at.desc()))
@@ -476,13 +487,13 @@ async def local_capture(
             return RedirectResponse(f"https://web.archive.org/web/{ts or '2'}im_/{url}", status_code=302)
         return HTMLResponse(local_view.not_held_page(project_id, url, ts or "2"), status_code=404,
                             headers=local_view.SANDBOX_HEADERS)
-    path, mimetype, capture_ts, kind = hit
+    path, mimetype, capture_ts, kind, source = hit
     with open(path, "rb") as f:
         body = f.read()
     headers = dict(local_view.SANDBOX_HEADERS)
     if "html" in mimetype or (not mimetype and kind != "image"):
         body = local_view.rewrite_html(body, url, capture_ts, project_id)
-        body = local_view.with_banner(body, local_view.banner(project_id, url, capture_ts, kind))
+        body = local_view.with_banner(body, local_view.banner(project_id, url, capture_ts, kind, source))
         charset = local_view.html_charset(body)
         media = "text/html" + (f"; charset={charset}" if charset else "")
     else:
@@ -629,16 +640,22 @@ async def _compute_stats(db: AsyncSession, project_id: int, scope: str = "site")
              f"WHERE af.project_id = :pid AND af.status = 'PROCESSED' AND {scope_sql} "
              f"AND {_ORIGINALS_ONLY} "
              "AND person IS NOT NULL AND person != '' "
-             "GROUP BY person ORDER BY n DESC LIMIT 40"),
+             "GROUP BY person"),
         params,
     )).fetchall()
+    # One chip per person, not per spelling (services/people.py).
+    canon = await people_service.canonicalizer(db, project_id)
+    per_person: Counter = Counter()
+    for name, n in people_rows:
+        per_person[canon.canonical(name)] += int(n)
+    people_top = [canon.display(k) for k, _ in per_person.most_common(40)]
 
     return {
         "processed": processed,
         "sentiments": sentiments,
         "content_types": content_types,
         "top_tags": [(t, int(n)) for t, n in tag_rows],
-        "people": [p for p, _ in people_rows],
+        "people": people_top,
     }
 
 
@@ -678,11 +695,17 @@ async def results_fragment(
         )
         params["tag"] = tag.lower()
     if person:
+        # Every spelling merged into this person matches.
+        canon = await people_service.canonicalizer(db, project_id)
+        spellings = {s.lower() for s in canon.variants(canon.canonical(person))} or {person.lower()}
+        marks = []
+        for i, s in enumerate(sorted(spellings)):
+            params[f"person{i}"] = s
+            marks.append(f":person{i}")
         clauses.append(
             f"EXISTS (SELECT 1 FROM json_each(fa.people_mentioned) je "
-            f"WHERE LOWER({_PERSON_VALUE}) = :person)"
+            f"WHERE LOWER(trim({_PERSON_VALUE})) IN ({', '.join(marks)}))"
         )
-        params["person"] = person.lower()
 
     where = " AND ".join(clauses)
     base = f"FROM archived_files af JOIN file_analyses fa ON fa.file_id = af.id WHERE {where}"
@@ -706,10 +729,13 @@ async def results_fragment(
         )
         by_id = {f.id: f for f in rows.scalars().all()}
         page_files = [by_id[i] for i in page_ids if i in by_id]
+    history_counts = {f.id: await history.capture_count(db, project_id, f.original_url)
+                      for f in page_files}
 
     return _render(request, "partials/_results.html", {
         "project_id": project_id,
         "files": page_files,
+        "history_counts": history_counts,
         "total": total,
         "page": page,
         "pages": pages,
@@ -717,6 +743,113 @@ async def results_fragment(
         "scope_counts": await _scope_counts(db, project_id),
         "filters": {"q": q, "sentiment": sentiment, "content_type": content_type,
                     "person": person, "tag": tag},
+    })
+
+
+# ===== People: merging spellings of one name =====
+async def _people_context(db: AsyncSession, project_id: int, q: str = "") -> dict:
+    canon = await people_service.canonicalizer(db, project_id)
+    _merges, separate = await people_service.decisions(db, project_id)
+    groups = people_service.groups(canon)
+    if q:
+        needle = people_service.key(q)
+        groups = [g for g in groups if any(needle in people_service.key(v) for v, _ in g["variants"])]
+    return {"project_id": project_id, "groups": groups[:300], "total": len(groups), "q": q,
+            "suggestions": people_service.suggestions(canon, separate),
+            "separate": sorted((canon.display(a), canon.display(b), a, b) for a, b in separate)}
+
+
+@router.get("/project/{project_id}/people", response_class=HTMLResponse)
+async def people_page(project_id: int, request: Request, q: str = Query(""),
+                      db: AsyncSession = Depends(get_db)):
+    project = await _get_project(db, project_id)
+    return _render(request, "people.html", {"project": project, **await _people_context(db, project_id, q)})
+
+
+@router.post("/project/{project_id}/people/merge", response_class=HTMLResponse)
+async def people_merge(project_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    await _get_project(db, project_id)
+    form = await request.form()
+    keys = [k for k in form.getlist("key") if k]
+    into = form.get("into") or ""
+    if into and into not in keys:
+        keys.append(into)
+    if len(keys) >= 2:
+        into = into or keys[0]
+        await people_service.merge(db, project_id, [k for k in keys if k != into], into)
+        await db.commit()
+        log.info("People: merged %d names into %r", len(keys) - 1, into, extra={"project_id": project_id})
+    return _render(request, "partials/_people.html", await _people_context(db, project_id, form.get("q") or ""))
+
+
+@router.post("/project/{project_id}/people/separate", response_class=HTMLResponse)
+async def people_separate(project_id: int, request: Request, a: str = Form(...), b: str = Form(...),
+                          undo: bool = Form(False), db: AsyncSession = Depends(get_db)):
+    await _get_project(db, project_id)
+    if undo:
+        await people_service.forget_separate(db, project_id, a, b)
+    else:
+        await people_service.keep_separate(db, project_id, a, b)
+    await db.commit()
+    return _render(request, "partials/_people.html", await _people_context(db, project_id))
+
+
+@router.post("/project/{project_id}/people/unmerge", response_class=HTMLResponse)
+async def people_unmerge(project_id: int, request: Request, key: str = Form(...),
+                         db: AsyncSession = Depends(get_db)):
+    await _get_project(db, project_id)
+    await people_service.unmerge(db, project_id, key)
+    await db.commit()
+    return _render(request, "partials/_people.html", await _people_context(db, project_id))
+
+
+# ===== Page history =====
+@router.get("/project/{project_id}/history", response_class=HTMLResponse)
+async def page_history(project_id: int, request: Request, url: str = Query(...),
+                       a: Optional[int] = Query(None), b: Optional[int] = Query(None),
+                       db: AsyncSession = Depends(get_db)):
+    project = await _get_project(db, project_id)
+    tl = await history.timeline(db, project_id, url)
+    diff = None
+    if a and b:
+        diff = await history.compare(db, project_id, a, b)
+    elif tl["captures"]:
+        # Default view: the most recent change.
+        changed = [c for c in tl["captures"] if c["change"] == "changed"]
+        if changed:
+            caps = tl["captures"]
+            last = changed[-1]
+            prev = caps[caps.index(last) - 1]
+            diff = await history.compare(db, project_id, prev["id"], last["id"])
+    return _render(request, "page_history.html", {"project": project, "url": url, **tl, "diff": diff})
+
+
+# ===== Full-text search =====
+@router.get("/project/{project_id}/_fulltext", response_class=HTMLResponse)
+async def fulltext_fragment(project_id: int, request: Request, q: str = Query(""),
+                            page: int = Query(1, ge=1),
+                            db: AsyncSession = Depends(get_db)):
+    await _get_project(db, project_id)
+    per_page = 20
+    result = {"query": "", "total": 0, "rows": []}
+    if q.strip():
+        result = await search_index.search(db, project_id, q,
+                                           limit=per_page, offset=(page - 1) * per_page)
+    return _render(request, "partials/_fulltext.html", {
+        "project_id": project_id, "q": q, "page": page,
+        "pages": (result["total"] + per_page - 1) // per_page, **result,
+        "unindexed": await search_index.pending_count(db, project_id),
+        "indexing": search_index.is_indexing(project_id),
+    })
+
+
+@router.post("/project/{project_id}/search-index", response_class=HTMLResponse)
+async def action_search_index(project_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    await _get_project(db, project_id)
+    search_index.start_index(project_id)
+    return _render(request, "partials/_fulltext.html", {
+        "project_id": project_id, "q": "", "rows": [], "total": 0, "page": 1, "pages": 0,
+        "unindexed": await search_index.pending_count(db, project_id), "indexing": True,
     })
 
 
@@ -773,7 +906,7 @@ async def _build_card(db: AsyncSession, project: Project) -> ArchivalCard:
     # 3. Offline tech-stack detection over archived HTML (CPU-bound -> thread)
     tech_stack = await asyncio.to_thread(techstack_detector.detect_in_files, local_paths)
     # 4. People surfaced from content analysis
-    people = enrichment.aggregate_people(analyses)
+    people = enrichment.aggregate_people(analyses, await people_service.canonicalizer(db, project_id))
     # 5. LLM narrative synthesis
     synth = await llm_service.synthesize_domain_card(
         project.domain, project.ollama_model, analyses, timeline, tech_stack, whois, people,

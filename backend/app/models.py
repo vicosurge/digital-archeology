@@ -84,6 +84,8 @@ class Project(Base):
     scope_reason = Column(Text)
     # URL patterns kept out of the corpus, one per line (services/exclusions.py).
     exclude_patterns = Column(Text)
+    # The project whose outbound links this one was started from (linked_sites).
+    source_project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -189,7 +191,8 @@ class FileAnalysis(Base):
 
     # Processing metadata
     processing_time_seconds = Column(Float)
-    tokens_used = Column(Integer)
+    tokens_used = Column(Integer)      # output tokens (eval_count)
+    prompt_tokens = Column(Integer)    # input tokens (prompt_eval_count); feeds the cost estimate
     model_used = Column(String(100))
     raw_response = Column(Text)  # Store raw LLM response for debugging
 
@@ -325,6 +328,10 @@ class LinkTarget(Base):
 
     # pending | recovered | not_archived | error | in_corpus | not_selected
     recovery_status = Column(String(20), default="not_selected")
+    # Which archive the copy came from (NULL = the Wayback Machine) and when
+    # other archives were last asked for a not_archived target (services/memento.py).
+    source_archive = Column(String(60))
+    memento_checked_at = Column(DateTime)
     wayback_timestamp = Column(String(14))
     wayback_url = Column(Text)
     # Days between the first citation and the capture used. Small is faithful;
@@ -397,6 +404,8 @@ class PageImage(Base):
     alt_text = Column(Text)
     # pending | recovered | not_archived | skipped | error
     recovery_status = Column(String(20), default="pending")
+    source_archive = Column(String(60))          # NULL = the Wayback Machine
+    memento_checked_at = Column(DateTime)
     wayback_timestamp = Column(String(14))
     wayback_url = Column(Text)
     mimetype = Column(String(100))
@@ -540,6 +549,25 @@ class PageComment(Base):
     commented_on = Column(String(10))
     depth = Column(Integer, default=1)          # 1 = top level, 2+ = a reply
     by_site = Column(Boolean, default=False)    # the publication answering a reader
+
+
+class PersonAlias(Base):
+    """A historian's decision about two spellings of a name (services/people.py).
+
+    kind 'merge': alias_key is the same person as canonical_key.
+    kind 'separate': the two are different people, whatever the automatic
+    rule thinks. Keys are folded names (people.key), not display spellings.
+    """
+    __tablename__ = "person_aliases"
+    __table_args__ = (
+        Index("ux_person_aliases", "project_id", "alias_key", "canonical_key", "kind", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    alias_key = Column(String(255), nullable=False)
+    canonical_key = Column(String(255), nullable=False)
+    kind = Column(String(10), nullable=False, default="merge")
 
 
 # ===== Pydantic Schemas =====

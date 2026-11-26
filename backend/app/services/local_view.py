@@ -70,20 +70,22 @@ def local_href(project_id: int, ts: str, url: str) -> str:
 async def resolve(db, project_id: int, url: str, ts: str) -> Optional[Tuple[str, str, str, str]]:
     """Find the held capture of ``url`` closest to ``ts``.
 
-    Returns (path_on_disk, mimetype, capture_timestamp, kind) or None.
+    Returns (path_on_disk, mimetype, capture_timestamp, kind, source) or None;
+    source is (archive name, its address for the capture) when the copy came
+    from an archive other than the Wayback Machine.
     """
     variants = url_variants(url)
     marks = ",".join(f":v{i}" for i in range(len(variants)))
     params = {f"v{i}": v for i, v in enumerate(variants)}
     params.update(pid=project_id, ts=int(ts) if ts.isdigit() else 0)
     queries = (
-        ("page", f"""SELECT local_path, mimetype, timestamp FROM archived_files
+        ("page", f"""SELECT local_path, mimetype, timestamp, NULL, NULL FROM archived_files
                     WHERE project_id=:pid AND local_path IS NOT NULL AND original_url IN ({marks})
                     ORDER BY ABS(CAST(timestamp AS INTEGER) - :ts) LIMIT 1"""),
-        ("image", f"""SELECT local_path, mimetype, wayback_timestamp FROM page_images
+        ("image", f"""SELECT local_path, mimetype, wayback_timestamp, source_archive, wayback_url FROM page_images
                      WHERE project_id=:pid AND local_path IS NOT NULL AND src_url IN ({marks})
                      ORDER BY ABS(CAST(wayback_timestamp AS INTEGER) - :ts) LIMIT 1"""),
-        ("linked", f"""SELECT local_path, mimetype, wayback_timestamp FROM link_targets
+        ("linked", f"""SELECT local_path, mimetype, wayback_timestamp, source_archive, wayback_url FROM link_targets
                       WHERE project_id=:pid AND local_path IS NOT NULL AND url IN ({marks})
                       LIMIT 1"""),
     )
@@ -92,7 +94,7 @@ async def resolve(db, project_id: int, url: str, ts: str) -> Optional[Tuple[str,
         if row:
             path = resolve_local_path(row[0])
             if path and os.path.isfile(path):
-                return path, row[1] or "", row[2] or ts, kind
+                return path, row[1] or "", row[2] or ts, kind, ((row[3], row[4]) if row[3] else None)
     return None
 
 
@@ -123,16 +125,20 @@ def rewrite_html(body: bytes, page_url: str, ts: str, project_id: int) -> bytes:
     return _TAG_RE.sub(lambda t: _ATTR_RE.sub(attr, t.group(0)), body)
 
 
-def banner(project_id: int, url: str, capture_ts: str, kind: str) -> bytes:
+def banner(project_id: int, url: str, capture_ts: str, kind: str,
+           source: Optional[Tuple[str, str]] = None) -> bytes:
     date = f"{capture_ts[:4]}-{capture_ts[4:6]}-{capture_ts[6:8]}" if len(capture_ts) >= 8 else capture_ts
     wb = f"https://web.archive.org/web/{capture_ts}/{url}"
+    archive = "Wayback Machine"
+    if source and source[0]:
+        archive, wb = source[0], source[1] or wb
     label = {"page": "Local copy", "linked": "Local copy of linked page"}.get(kind, "Local copy")
     e = html.escape
     return (
         '<div style="all:initial;display:block;font:13px/1.5 system-ui,sans-serif;'
         'background:#1f2937;color:#f9fafb;padding:6px 12px;border-bottom:2px solid #f59e0b">'
         f'<b>{label}</b> · captured {e(date)} · <span style="opacity:.8">{e(url)}</span> · '
-        f'<a style="color:#fcd34d" href="{e(wb)}" target="_blank">Wayback Machine</a> · '
+        f'<a style="color:#fcd34d" href="{e(wb)}" target="_blank">{e(archive)}</a> · '
         f'<a style="color:#fcd34d" href="/project/{project_id}">Back to project</a></div>'
     ).encode("utf-8")
 

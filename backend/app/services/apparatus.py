@@ -86,16 +86,24 @@ def merge_variants(keys: List[str]) -> Dict[str, str]:
     deciding they are the same person is the historian's call, not a string
     comparison's.
     """
-    by_length = sorted(set(keys), key=lambda k: (-len(_tokens(k)), k))
+    unique = set(keys)
+    tokens = {k: _tokens(k) for k in unique}
+    # Inverted index: the names that contain a word. A candidate must contain
+    # every word of the key, so intersecting postings finds them without
+    # comparing every pair (1.5k names took 3 s that way).
+    postings: Dict[str, set] = {}
+    for k, toks in tokens.items():
+        for t in toks:
+            postings.setdefault(t, set()).add(k)
     canonical: Dict[str, str] = {}
-    for key in by_length:
-        key_tokens = _tokens(key)
+    for key in unique:
+        key_tokens = tokens[key]
         if not key_tokens:
             canonical[key] = key
             continue
-        matches = [c for c in by_length
-                   if c != key and len(_tokens(c)) > len(key_tokens)
-                   and key_tokens < _tokens(c)]
+        lists = sorted((postings[t] for t in key_tokens), key=len)
+        found = set(lists[0]).intersection(*lists[1:])
+        matches = [c for c in found if c != key and key_tokens < tokens[c]]
         canonical[key] = matches[0] if len(matches) == 1 else key
     # Follow chains so "Peña" -> "Peña Nieto" -> "Enrique Peña Nieto".
     resolved: Dict[str, str] = {}
@@ -203,12 +211,12 @@ async def actors(db: AsyncSession, project_id: int, limit: int = 40) -> Dict[str
     # Fold case and accents for counting but keep the most common spelling for
     # display, then merge partial namings into the fullest form (see
     # merge_variants) so one person is not counted as three.
-    raw_keys = []
-    for row in rows:
-        name = (row.get("name") or "").strip()
-        if len(name) >= MIN_NAME_LENGTH:
-            raw_keys.append(fold(name))
-    alias = merge_variants(raw_keys)
+    # The project's canonicalizer applies the same automatic rule plus any
+    # merges the historian made on the People page (services/people.py).
+    from .people import canonicalizer
+    canon = await canonicalizer(db, project_id,
+                                extra=[(r.get("name") or "").strip() for r in rows])
+    commenters = {canon.canonical(c) for c in commenters}
 
     docs: Dict[str, set] = defaultdict(set)
     roles: Dict[str, Counter] = defaultdict(Counter)
@@ -219,7 +227,7 @@ async def actors(db: AsyncSession, project_id: int, limit: int = 40) -> Dict[str
         name = (row.get("name") or "").strip()
         if len(name) < MIN_NAME_LENGTH:
             continue
-        key = alias.get(fold(name), fold(name))
+        key = canon.canonical(name)
         docs[key].add(row["file_id"])
         roles[key][row.get("role") or "mentioned"] += 1
         spellings[key][name] += 1

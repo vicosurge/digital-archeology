@@ -174,3 +174,21 @@ label { font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 
 table.summary { width: 100%; border-collapse: collapse; }
 table.summary td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 table.summary td.k { color: var(--muted); width: 160px; }
+
+/* Full-text search matches */
+mark { background: rgba(250, 204, 21, .35); color: inherit; padding: 0 1px; border-radius: 2px; }
+
+/* Page history */
+.history td, .history th { padding: 4px 8px; text-align: left; }
+.add { color: #4ade80; }
+.del { color: #f87171; }
+.diff-wrap { overflow-x: auto; }
+table.diff { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.diff td { padding: 2px 6px; vertical-align: top; white-space: normal !important; word-break: break-word; }
+table.diff th.diff_header, table.diff td.diff_header { color: #8b93a7; font-weight: normal; }
+table.diff td.diff_next { display: none; }
+.diff_add { background: rgba(74, 222, 128, .18); }
+.diff_chg { background: rgba(250, 204, 21, .18); }
+.diff_sub { background: rgba(248, 113, 113, .2); }
+
+.panel.inset { background: rgba(255,255,255,.03); margin-bottom: 0; }

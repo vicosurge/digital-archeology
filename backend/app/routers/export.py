@@ -276,6 +276,8 @@ async def get_stats(
     all_tags = {}
     all_people = set()
     all_subjects = set()
+    from ..services.people import canonicalizer
+    canon = await canonicalizer(db, project_id)
 
     for f in files:
         if not f.analysis:
@@ -299,7 +301,7 @@ async def get_stats(
         for person in (f.analysis.people_mentioned or []):
             name = enrichment.person_to_str(person)
             if name:
-                all_people.add(name)
+                all_people.add(canon.name(name))
 
         # Unique subjects
         for subject in (f.analysis.subjects or []):

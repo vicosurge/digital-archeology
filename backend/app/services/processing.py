@@ -86,6 +86,7 @@ class WorkResult:
     analysis: Optional[Dict[str, Any]] = None
     raw: str = ""
     tokens: int = 0
+    prompt_tokens: int = 0
     duration: float = 0.0
     error: Optional[str] = None
     fatal: bool = False
@@ -540,7 +541,7 @@ class ProcessingWorker:
 
                 await result_q.put(WorkResult(
                     item=item, analysis=res.analysis, raw=res.raw_response,
-                    tokens=res.tokens, duration=res.duration,
+                    tokens=res.tokens, prompt_tokens=res.prompt_tokens, duration=res.duration,
                     error=res.error, fatal=res.fatal,
                 ))
             except asyncio.CancelledError:
@@ -692,6 +693,7 @@ class ProcessingWorker:
         await self._upsert_analysis(
             session, file_id=item.file_id, file_path=item.path, data=data,
             duration=result.duration, tokens=result.tokens,
+            prompt_tokens=result.prompt_tokens,
             model=model, raw=result.raw, source_file_id=None,
         )
         await session.execute(
@@ -776,7 +778,8 @@ class ProcessingWorker:
     async def _upsert_analysis(self, session: AsyncSession, *, file_id: int,
                                file_path: Optional[str], data: Dict[str, Any],
                                duration: float, tokens: int, model: str,
-                               raw: Optional[str], source_file_id: Optional[int]) -> None:
+                               raw: Optional[str], source_file_id: Optional[int],
+                               prompt_tokens: int = 0) -> None:
         """Insert or update. file_id is UNIQUE, so a plain insert would raise
         IntegrityError on any reprocess."""
         values = {
@@ -795,6 +798,7 @@ class ProcessingWorker:
             "description": data.get("description"),
             "processing_time_seconds": duration,
             "tokens_used": tokens,
+            "prompt_tokens": prompt_tokens,
             "model_used": model,
             "raw_response": raw,
             "created_at": datetime.utcnow(),

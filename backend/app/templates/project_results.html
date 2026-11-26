@@ -54,10 +54,10 @@
   {% endif %}
   {% if stats.people %}
   <div style="margin-top:10px">
-    <div class="kv">People mentioned <span class="muted small">(click to filter)</span></div>
+    <div class="kv">People mentioned <span class="muted small">(click to filter · <a href="/project/{{ project.id }}/people">merge spellings</a>)</span></div>
     <div class="chips">
       {% for person in stats.people %}
-      <span class="chip" hx-get="/project/{{ project.id }}/_results?scope={{ scope }}&person={{ person }}"
+      <span class="chip" hx-get="/project/{{ project.id }}/_results?scope={{ scope }}&person={{ person|urlencode }}"
             hx-target="#results" hx-swap="innerHTML">{{ person }}</span>
       {% endfor %}
     </div>
@@ -69,7 +69,7 @@
   <form hx-get="/project/{{ project.id }}/_results?scope={{ scope }}" hx-target="#results" hx-swap="innerHTML"
         hx-trigger="submit, change from:select">
     <div class="row">
-      <div class="field" style="flex:2"><label>Search descriptions</label>
+      <div class="field" style="flex:2"><label>Search the AI descriptions</label>
         <input name="q" placeholder="keyword…" style="width:100%"></div>
       <div class="field"><label>Sentiment</label>
         <select name="sentiment">
@@ -82,8 +82,19 @@
   </form>
 </div>
 
+<div class="panel">
+  <form hx-get="/project/{{ project.id }}/_fulltext" hx-target="#fulltext" hx-swap="innerHTML">
+    <div class="row">
+      <div class="field" style="flex:2"><label>Search the pages' own text</label>
+        <input name="q" placeholder='words, "a phrase", OR, prefix*' style="width:100%"></div>
+      <div class="field"><label>&nbsp;</label><button type="submit">Search text</button></div>
+    </div>
+  </form>
+  <div id="fulltext" hx-get="/project/{{ project.id }}/_fulltext" hx-trigger="load" hx-swap="innerHTML"></div>
+</div>
+
 <div id="results"
-     hx-get="/project/{{ project.id }}/_results?scope={{ scope }}"
+     hx-get="/project/{{ project.id }}/_results?scope={{ scope }}{% if person %}&person={{ person|urlencode }}{% endif %}"
      hx-trigger="load"
      hx-swap="innerHTML">
   <div class="muted">Loading…</div>

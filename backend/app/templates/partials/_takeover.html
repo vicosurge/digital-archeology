@@ -1,0 +1,63 @@
+{# Section 1 of the Research page: the scope window and the takeover check (services/takeover.py). #}
+{% macro d(ts) %}{{ ts[:4] }}-{{ ts[4:6] }}-{{ ts[6:8] }}{% endmacro %}
+{% if message %}<div class="notice info">{{ message }}</div>{% endif %}
+
+{% if project.scope_start or project.scope_end %}
+  {% if project.scope_reason %}<p>{{ project.scope_reason }}</p>{% endif %}
+  <div class="muted small">In scope: captures {{ 'from ' ~ d(project.scope_start) if project.scope_start else 'from the beginning' }}
+    {{ 'until ' ~ d(project.scope_end) if project.scope_end else 'onward' }}.</div>
+{% else %}
+  <p class="muted">No scope window set: the whole capture history is treated as one site.</p>
+{% endif %}
+
+{% if proposal and not applied %}
+  <div class="panel inset" style="margin-top:12px">
+    <h3>Suggested period <span class="badge">{{ proposal.confidence }} confidence</span></h3>
+    <p>The domain seems to have changed hands. Proposed: captures until <b>{{ d(proposal.scope_end) }}</b>.</p>
+    <ul class="small">{% for e in proposal.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+    <form hx-post="/project/{{ project.id }}/scope" hx-target="#scope" hx-swap="innerHTML">
+      <input type="hidden" name="action" value="apply">
+      <div class="row" style="gap:8px">
+        <div class="field"><label>From</label><input name="scope_start" value="{{ d(project.scope_start) if project.scope_start }}" placeholder="the beginning"></div>
+        <div class="field"><label>Until</label><input name="scope_end" value="{{ d(proposal.scope_end) }}"></div>
+      </div>
+      <div class="field"><label>Reason (shown here and in the export)</label>
+        <textarea name="scope_reason" rows="3" style="width:100%">{{ proposal.reason }}</textarea></div>
+      <button type="submit">Apply scope</button>
+      <span class="muted small">Captures after the end are kept and can be viewed, but are not analyzed. Undo with Clear.</span>
+    </form>
+  </div>
+{% elif proposal and applied %}
+  <div class="muted small" style="margin-top:6px">The takeover check agrees with this window ({{ proposal.confidence }} confidence).</div>
+{% elif years %}
+  <div class="muted small" style="margin-top:6px">No change of owner found in {{ years|length }} year{{ 's' if years|length != 1 }} of captures.</div>
+{% endif %}
+
+{% if project.scope_start or project.scope_end %}
+  <details style="margin-top:10px"><summary class="small">Change or clear the window</summary>
+    <form hx-post="/project/{{ project.id }}/scope" hx-target="#scope" hx-swap="innerHTML" style="margin-top:8px">
+      <div class="row" style="gap:8px">
+        <div class="field"><label>From</label><input name="scope_start" value="{{ d(project.scope_start) if project.scope_start }}"></div>
+        <div class="field"><label>Until</label><input name="scope_end" value="{{ d(project.scope_end) if project.scope_end }}"></div>
+      </div>
+      <div class="field"><label>Reason</label><textarea name="scope_reason" rows="3" style="width:100%">{{ project.scope_reason or '' }}</textarea></div>
+      <button type="submit" name="action" value="apply">Save window</button>
+      <button type="submit" name="action" value="clear" class="ghost">Clear scope</button>
+    </form>
+  </details>
+{% endif %}
+
+{% if years %}
+  <details style="margin-top:10px"><summary class="small">Year-by-year check</summary>
+    <table class="summary history small">
+      <tr><th>Year</th><th>Pages read</th><th>Spam</th><th>Parked</th><th>Shared words</th><th>Verdict</th></tr>
+      {% for y in years %}
+      <tr><td>{{ y.year }}</td><td>{{ y.sampled }}</td><td>{{ '%d%%'|format(y.spam_rate * 100) }}</td>
+        <td>{{ '%d%%'|format(y.parked_rate * 100) }}</td>
+        <td>{{ '%d%%'|format(y.similarity * 100) if y.similarity is not none else '—' }}</td>
+        <td>{% if y.bad %}<span class="del">new owner</span>{% elif y.thin %}<span class="muted">too little to judge</span>{% else %}original site{% endif %}
+          {% if y.reasons %}<div class="muted">{{ y.reasons|join('; ') }}</div>{% endif %}</td></tr>
+      {% endfor %}
+    </table>
+  </details>
+{% endif %}

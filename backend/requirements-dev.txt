@@ -1,0 +1,8 @@
+# Test tools, on top of requirements.txt. Not installed in the image.
+-r requirements.txt
+iniconfig==2.3.1
+packaging==26.4
+pluggy==1.7.0
+Pygments==2.21.0
+pytest==9.2.0
+pytest-asyncio==1.5.0

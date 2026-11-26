@@ -1,0 +1,30 @@
+{# Full-text search results over the pages' own text (services/search_index.py). #}
+{% if indexing %}
+  <div class="muted small" hx-get="/project/{{ project_id }}/_fulltext?q={{ q|urlencode }}" hx-trigger="every 3s" hx-target="#fulltext" hx-swap="innerHTML">
+    Building the search index… {{ unindexed }} pages to go.</div>
+{% elif unindexed %}
+  <div class="muted small row" style="gap:8px;align-items:center">
+    {{ unindexed }} downloaded page{{ 's' if unindexed != 1 }} not in the search index yet.
+    <button class="secondary" hx-post="/project/{{ project_id }}/search-index" hx-target="#fulltext" hx-swap="innerHTML">Index them</button>
+  </div>
+{% endif %}
+{% if q %}
+  <div class="muted small" style="margin:8px 0">{{ total }} page{{ 's' if total != 1 }} contain{{ 's' if total == 1 }} <code>{{ query }}</code>{% if total > rows|length %} · showing {{ (page - 1) * 20 + 1 }}–{{ (page - 1) * 20 + rows|length }}{% endif %}</div>
+  {% for r in rows %}
+    <div class="result" style="padding:8px 0;border-bottom:1px solid var(--border, #2a2f3a)">
+      <div class="row" style="justify-content:space-between">
+        <a href="{{ local_href(project_id, r.timestamp, r.url) }}" target="_blank">{{ r.url }}</a>
+        <span class="muted small">{{ r.timestamp[:4] }}-{{ r.timestamp[4:6] }}-{{ r.timestamp[6:8] }}{% if r.captures > 1 %} · <a href="/project/{{ project_id }}/history?url={{ r.url|urlencode }}">in {{ r.captures }} captures</a>{% endif %}</span>
+      </div>
+      <div class="small" style="margin-top:4px">{{ r.snippet|safe }}</div>
+    </div>
+  {% else %}
+    <div class="muted">No page contains that.</div>
+  {% endfor %}
+  {% if pages > 1 %}
+    <div class="row" style="gap:8px;margin-top:8px">
+      {% if page > 1 %}<button class="secondary" hx-get="/project/{{ project_id }}/_fulltext?q={{ q|urlencode }}&page={{ page - 1 }}" hx-target="#fulltext">← Previous</button>{% endif %}
+      {% if page < pages %}<button class="secondary" hx-get="/project/{{ project_id }}/_fulltext?q={{ q|urlencode }}&page={{ page + 1 }}" hx-target="#fulltext">Next →</button>{% endif %}
+    </div>
+  {% endif %}
+{% endif %}

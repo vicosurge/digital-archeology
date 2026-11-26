@@ -35,7 +35,8 @@
   <div class="result">
     <div class="row between">
       <span><a href="{{ file.wayback_url }}" target="_blank">{{ file.original_url|truncate_url(80) }}</a>
-        {% if file.local_path %}· <a class="small" href="{{ local_href(project_id, file.timestamp, file.original_url) }}" target="_blank" title="Read the downloaded copy here, without the Wayback Machine">local copy</a>{% endif %}</span>
+        {% if file.local_path %}· <a class="small" href="{{ local_href(project_id, file.timestamp, file.original_url) }}" target="_blank" title="Read the downloaded copy here, without the Wayback Machine">local copy</a>{% endif %}
+        {% if history_counts.get(file.id, 0) > 1 %}· <a class="small" href="/project/{{ project_id }}/history?url={{ file.original_url|urlencode }}" title="How this page changed across its captures">history ({{ history_counts[file.id] }})</a>{% endif %}</span>
       <span class="muted small">
         {# Captures of a URL that was analyzed once; the summary is shared. #}
         {% if a.source_file_id %}<span class="badge dup"

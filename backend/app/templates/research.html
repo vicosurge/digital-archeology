@@ -16,14 +16,10 @@
 {# ---- 1. Scope ---- #}
 <div class="panel">
   <h2>1 · The period under study</h2>
-  {% if project.scope_reason %}
-    <p>{{ project.scope_reason }}</p>
-    <div class="muted small">Captures {{ project.scope_start|fmt_ts if project.scope_start else 'from the beginning' }}
-      – {{ project.scope_end|fmt_ts if project.scope_end else 'onward' }}. Set with <code>scripts/set_scope.py</code>.</div>
-  {% else %}
-    <p class="muted">No scope window set: the whole capture history is treated as one site.
-      Use <code>scripts/set_scope.py</code> if the domain changed hands.</p>
-  {% endif %}
+  <div id="scope" hx-get="/project/{{ project.id }}/_takeover" hx-trigger="load" hx-swap="innerHTML">
+    {% if project.scope_reason %}<p>{{ project.scope_reason }}</p>{% endif %}
+    <div class="muted small">Checking every year of captures for a change of owner…</div>
+  </div>
 </div>
 
 {# ---- 2. Themes over time ---- #}
@@ -39,6 +35,12 @@
     and documents from the Wayback Machine as they looked when cited (network, no quota) · summarize what was
     recovered and how it relates to the site (AI, uses quota).</p>
   <div id="links-status">{% include "partials/_links_status.html" %}</div>
+
+  <h3 style="margin-top:18px">Linked sites</h3>
+  <p class="muted small">The sites these pages pointed to, grouped by domain. Many are gone too; any of them can be
+    studied as a project of its own. Starting one only creates it: nothing is searched or spent until you run it.</p>
+  <div id="linked-sites" hx-get="/project/{{ project.id }}/_linked-sites" hx-trigger="load" hx-swap="innerHTML">
+    <span class="muted small">Loading…</span></div>
 
   <h3 style="margin-top:18px">Browse</h3>
   <div id="links-table" hx-get="/project/{{ project.id }}/_links-table?scope=external&status=recovered"

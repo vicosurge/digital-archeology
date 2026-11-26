@@ -5,6 +5,8 @@
   <div>
     <h1>{{ project.name }}</h1>
     <div class="muted">{{ project.domain }}</div>
+    {% if source_project %}<div class="muted small">Started from the links of
+      <a href="/project/{{ source_project.id }}/research">{{ source_project.name }}</a>.</div>{% endif %}
   </div>
   <div class="row" style="gap:8px">
     <a class="btn ghost" href="/">← All projects</a>

@@ -332,6 +332,9 @@ class DownloadService:
 
             log.info("Download finished: %d fetched this run, %d failed", session_downloaded, errors,
                      extra={"project_id": project_id})
+            # Make the new pages searchable. Reads local files only, no network.
+            from .search_index import start_index
+            start_index(project_id)
             # Update final status
             project.status = ProjectStatus.DOWNLOAD_COMPLETE
             project.files_downloaded = downloaded

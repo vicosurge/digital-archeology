@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}History — {{ url }}{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom:18px">
+  <div>
+    <h1>Page history</h1>
+    <div class="muted" style="word-break:break-all">{{ url }}</div>
+  </div>
+  <div class="row" style="gap:8px">
+    <a class="btn ghost" href="/project/{{ project.id }}">← Workflow</a>
+    <a class="btn ghost" href="/project/{{ project.id }}/results">Results</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="muted small" style="margin-bottom:8px">
+    {{ captures|length }} capture{{ 's' if captures|length != 1 }} held ·
+    {{ versions }} distinct version{{ 's' if versions != 1 }} of the text.
+    Only the visible text is compared, not the markup.
+    {% if truncated %}Very long history: the first 10 and the most recent captures are shown.{% endif %}
+  </div>
+  <form method="get" action="/project/{{ project.id }}/history">
+    <input type="hidden" name="url" value="{{ url }}">
+    <table class="summary history">
+      <tr><th>Compare</th><th>Captured</th><th>Words</th><th>Change from the previous capture</th><th></th></tr>
+      {% for c in captures %}
+      <tr class="{{ 'muted' if c.change == 'same' }}">
+        <td style="white-space:nowrap">
+          <input type="radio" name="a" value="{{ c.id }}" {% if diff and diff.a.id == c.id %}checked{% endif %} title="Older side">
+          <input type="radio" name="b" value="{{ c.id }}" {% if diff and diff.b.id == c.id %}checked{% endif %} title="Newer side">
+        </td>
+        <td style="white-space:nowrap">{{ c.timestamp|fmt_ts }}{% if not c.in_scope %} <span class="badge" title="Outside the project's scope window">out of scope</span>{% endif %}</td>
+        <td>{{ c.words }}</td>
+        <td>
+          {% if c.change == 'first' %}first capture
+          {% elif c.change == 'same' %}unchanged
+          {% else %}<span class="add">+{{ c.added }}</span> / <span class="del">−{{ c.removed }}</span> words{% endif %}
+        </td>
+        <td><a class="small" href="{{ local_href(project.id, c.timestamp, c.url) }}" target="_blank">local copy</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <div class="row" style="gap:8px;margin-top:10px">
+      <button type="submit">Compare the two selected</button>
+      <span class="muted small">Pick the older capture in the first column and the newer one in the second.</span>
+    </div>
+  </form>
+</div>
+
+{% if diff %}
+<div class="panel">
+  <h2>{{ diff.a.timestamp|fmt_ts }} → {{ diff.b.timestamp|fmt_ts }}</h2>
+  {% if diff.table %}
+    <div class="muted small" style="margin-bottom:8px"><span class="add">+{{ diff.added }}</span> / <span class="del">−{{ diff.removed }}</span> words. Unchanged stretches are folded.</div>
+    <div class="diff-wrap">{{ diff.table|safe }}</div>
+  {% else %}
+    <div class="muted">The text of these two captures is identical.</div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

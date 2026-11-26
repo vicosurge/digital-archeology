@@ -99,6 +99,14 @@ async def init_db():
         await _ensure_column(conn, "projects", "scope_reason", "TEXT")
         await _ensure_column(conn, "projects", "exclude_patterns", "TEXT")
         await _ensure_column(conn, "archival_cards", "whois_domain", "VARCHAR(255)")
+        await _ensure_column(conn, "file_analyses", "prompt_tokens", "INTEGER")
+        await _ensure_column(conn, "projects", "source_project_id", "INTEGER")
+        for table in ("link_targets", "page_images"):
+            await _ensure_column(conn, table, "source_archive", "VARCHAR(60)")
+            await _ensure_column(conn, table, "memento_checked_at", "DATETIME")
+        # Full-text index of the pages' own text (services/search_index.py).
+        from .services.search_index import CREATE_SQL as _FTS_SQL
+        await conn.exec_driver_sql(_FTS_SQL)
         await _ensure_column(
             conn, "archived_files", "in_scope", "BOOLEAN NOT NULL DEFAULT 1"
         )

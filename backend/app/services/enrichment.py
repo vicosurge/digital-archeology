@@ -223,12 +223,15 @@ def person_to_str(person: Any) -> str:
     return str(person).strip()
 
 
-def aggregate_people(analyses: List[Any], limit: int = 25) -> List[Dict[str, Any]]:
-    """Aggregate people mentioned across file analyses, ranked by mention count."""
+def aggregate_people(analyses: List[Any], canon: Any = None, limit: int = 25) -> List[Dict[str, Any]]:
+    """Aggregate people mentioned across file analyses, ranked by mention count.
+
+    ``canon`` (services/people.Canon) merges spellings of one person."""
     counter: Counter = Counter()
     for analysis in analyses:
         for person in (getattr(analysis, "people_mentioned", None) or []):
             name = person_to_str(person)
             if name:
-                counter[name] += 1
-    return [{"name": name, "mentions": count} for name, count in counter.most_common(limit)]
+                counter[canon.canonical(name) if canon else name] += 1
+    return [{"name": canon.display(k) if canon else k, "mentions": count}
+            for k, count in counter.most_common(limit)]

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}People — {{ project.name }}{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom:18px">
+  <div>
+    <h1>People</h1>
+    <div class="muted">{{ project.name }} · {{ project.domain }}</div>
+  </div>
+  <div class="row" style="gap:8px">
+    <a class="btn ghost" href="/project/{{ project.id }}/results">← Results</a>
+    <a class="btn" href="/project/{{ project.id }}/research">Research →</a>
+  </div>
+</div>
+<div class="panel muted small">
+  The same person is often named several ways. Case, accents and hyphens never make a new person, and a shorter
+  name joins a fuller one when it fits exactly one ("Berners-Lee" into "Tim Berners-Lee"). Nicknames, initials
+  and names that fit several people are left for you to decide here. Your decisions apply to the results, the
+  archival card, the themes, the close readings and the export.
+</div>
+<div id="people">{% include "partials/_people.html" %}</div>
+{% endblock %}

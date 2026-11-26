@@ -32,6 +32,7 @@
           <button>documents</button>
         </form>
         {% endif %}
+        {% if R.pending and R.estimate %}<div class="muted small" style="flex-basis:100%">{{ R.estimate }} (all {{ R.pending }} queued)</div>{% endif %}
         <button class="secondary" hx-post="/project/{{ project.id }}/reading/select" hx-target="#reading-status" hx-swap="innerHTML">Re-check selection</button>
         {% if R.counts.error %}
         <button class="secondary" hx-post="/project/{{ project.id }}/reading/requeue-errors" hx-target="#reading-status" hx-swap="innerHTML">Retry {{ R.counts.error }} errors</button>

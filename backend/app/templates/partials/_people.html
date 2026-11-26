@@ -1,0 +1,62 @@
+{% if suggestions %}
+<div class="panel">
+  <h2>Possibly the same person</h2>
+  <div class="muted small" style="margin-bottom:8px">Never merged automatically. Accepting merges the first into the second.</div>
+  <table class="summary history">
+    {% for s in suggestions %}
+    <tr>
+      <td>{{ s.alias_name }} <span class="muted small">({{ s.alias_pages }})</span></td>
+      <td class="muted">→</td>
+      <td>{{ s.into_name }} <span class="muted small">({{ s.into_pages }})</span></td>
+      <td class="muted small">{{ 'initials' if s.reason == 'initials' else s.reason }}</td>
+      <td style="white-space:nowrap">
+        <form style="display:inline" hx-post="/project/{{ project_id }}/people/merge" hx-target="#people" hx-swap="innerHTML">
+          <input type="hidden" name="key" value="{{ s.alias }}"><input type="hidden" name="into" value="{{ s.into }}">
+          <button class="secondary">Same person</button></form>
+        <form style="display:inline" hx-post="/project/{{ project_id }}/people/separate" hx-target="#people" hx-swap="innerHTML">
+          <input type="hidden" name="a" value="{{ s.alias }}"><input type="hidden" name="b" value="{{ s.into }}">
+          <button class="ghost">Keep separate</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<div class="panel">
+  <form hx-get="/project/{{ project_id }}/people" hx-select="#people" hx-target="#people" hx-swap="outerHTML" class="row" style="gap:8px">
+    <input name="q" value="{{ q }}" placeholder="find a name…" style="flex:1">
+    <button type="submit" class="secondary">Find</button>
+  </form>
+  <form hx-post="/project/{{ project_id }}/people/merge" hx-target="#people" hx-swap="innerHTML">
+    <input type="hidden" name="q" value="{{ q }}">
+    <div class="row between" style="margin:10px 0">
+      <span class="muted small">{{ total }} people{% if total > groups|length %} · showing {{ groups|length }}{% endif %}.
+        Tick two or more, pick the name to keep, and merge.</span>
+      <button type="submit">Merge the ticked names</button>
+    </div>
+    <table class="summary history">
+      <tr><th>Merge</th><th>Keep</th><th>Name</th><th>Mentions</th><th>Spellings</th><th></th></tr>
+      {% for g in groups %}
+      <tr>
+        <td><input type="checkbox" name="key" value="{{ g.key }}"></td>
+        <td><input type="radio" name="into" value="{{ g.key }}"></td>
+        <td><a href="/project/{{ project_id }}/results?person={{ g.name|urlencode }}">{{ g.name }}</a></td>
+        <td>{{ g.pages }}</td>
+        <td class="small muted">{% if g.variants|length > 1 %}{% for v, n in g.variants %}{{ v }} ({{ n }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}</td>
+        <td>{% if g.manual %}<button class="ghost small" type="button" hx-post="/project/{{ project_id }}/people/unmerge" hx-vals='{"key": {{ g.key|tojson }}}' hx-target="#people" hx-swap="innerHTML" title="Undo the merges you made into this name">undo merge</button>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </form>
+</div>
+
+{% if separate %}
+<div class="panel">
+  <h2>Kept separate</h2>
+  {% for an, bn, a, b in separate %}
+  <div class="row" style="gap:8px;align-items:center">{{ an }} ≠ {{ bn }}
+    <button class="ghost small" hx-post="/project/{{ project_id }}/people/separate" hx-vals='{"a": {{ a|tojson }}, "b": {{ b|tojson }}, "undo": true}' hx-target="#people" hx-swap="innerHTML">forget</button></div>
+  {% endfor %}
+</div>
+{% endif %}

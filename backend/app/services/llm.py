@@ -26,6 +26,7 @@ class AnalysisResult:
     analysis: Optional[Dict[str, Any]] = None
     raw_response: str = ""
     tokens: int = 0
+    prompt_tokens: int = 0
     duration: float = 0.0
     error: Optional[str] = None
     fatal: bool = False
@@ -297,6 +298,7 @@ Respond ONLY with the JSON object, no additional text."""
 
         raw_response = result.get("response", "") or ""
         tokens = result.get("eval_count", 0) or 0
+        prompt_tokens = result.get("prompt_eval_count", 0) or 0
         duration = (result.get("eval_duration", 0) or 0) / 1_000_000_000
 
         parsed = self._extract_json(raw_response)
@@ -306,6 +308,7 @@ Respond ONLY with the JSON object, no additional text."""
             return AnalysisResult(
                 raw_response=failure_raw(result),
                 tokens=tokens,
+                prompt_tokens=prompt_tokens,
                 duration=duration,
                 error=unparseable_error(result, cfg.num_predict),
                 done_reason=done_reason,
@@ -315,6 +318,7 @@ Respond ONLY with the JSON object, no additional text."""
             analysis=analysis,
             raw_response=raw_response,
             tokens=tokens,
+            prompt_tokens=prompt_tokens,
             duration=duration,
             done_reason=done_reason,
         )

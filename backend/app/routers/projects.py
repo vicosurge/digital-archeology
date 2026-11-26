@@ -102,6 +102,12 @@ async def apply_scope(db: AsyncSession, project: Project) -> dict:
         .group_by(ArchivedFile.in_scope)
     )
     counts = {bool(flag): int(n) for flag, n in rows.all()}
+    # The search index covers in-scope pages only: drop what left the scope
+    # now, and index what entered it in the background.
+    from ..services import search_index
+    await search_index.prune(db, project.id)
+    await db.commit()
+    search_index.start_index(project.id)
     return {"in_scope": counts.get(True, 0), "excluded": counts.get(False, 0),
             "by_pattern": len(out_ids), "requeued": len(requeue)}
 

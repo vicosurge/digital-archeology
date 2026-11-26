@@ -1,5 +1,7 @@
 # Digital Archeology
 
+[![CI](https://github.com/vicosurge/digital-archeology/actions/workflows/ci.yml/badge.svg)](https://github.com/vicosurge/digital-archeology/actions/workflows/ci.yml)
+
 Recover a website that no longer exists from the Internet Archive's Wayback
 Machine, read it with a language model, and package what was found as an
 archive a historian can cite.
@@ -16,9 +18,12 @@ browser with no server.
 The app is a single FastAPI process with a server-rendered HTMX UI: no
 JavaScript build, no Node, one SQLite database.
 
-> **Run it on your own machine or LAN.** There is no login. Anyone who can
-> reach the port can start jobs that spend your LLM credits, change or delete
-> projects, and read the logs. Do not expose it to the internet as is.
+> **Run it on your own machine or LAN.** There is no login unless you set
+> `DA_PASSWORD`: anyone who can reach the port can start jobs that spend your
+> LLM credits, change or delete projects, and read the logs. Set a password
+> whenever anyone else can reach it, and put it behind HTTPS (a reverse proxy)
+> if it leaves your network: HTTP Basic auth sends the password with every
+> request.
 
 ## What it does
 
@@ -32,9 +37,17 @@ JavaScript build, no Node, one SQLite database.
   redirects are labeled as such instead of being counted as failures.
 - **Exclusion list** per project: URL patterns (`/wp-admin/`, `*.css`, …) kept
   out of the corpus. A suggested list covers CMS plumbing.
-- **Scope window**: when a domain expired and was taken over (spam farms are
-  common), only the original era is analyzed. The later captures are kept as
-  evidence.
+- **Takeover detection and scope window**: when a domain expired and was taken
+  over (spam farms are common), only the original era should be analyzed. The
+  app reads a sample of every year's pages (spam vocabulary in English and
+  Spanish, parking pages, a switch of script, vocabulary shared with the early
+  years, empty placeholder years, RDAP re-registration), proposes where the
+  original site ends with its evidence, and applies it on a click. The later
+  captures are kept as evidence.
+- **Other web archives**: links and images the Wayback Machine never captured
+  are looked up in other Memento archives (Archive-It and Arquivo.pt, the ones
+  that answer automated clients), and the copy records which archive it came
+  from.
 - **Local viewer**: read any downloaded page in the browser, with its links and
   images pointing to the other local captures, without the Wayback Machine.
   Archived HTML is served sandboxed so its scripts never run.
@@ -44,7 +57,9 @@ JavaScript build, no Node, one SQLite database.
   sentiment, tags. Duplicate captures are analyzed once and the result is
   copied to the others.
 - **Linked material**: extracts every outbound link, recovers what it pointed
-  to from the Archive, and classifies how the site related to it.
+  to from the Archive, and classifies how the site related to it. The **linked
+  sites** table groups them by domain, and any of them can become a project of
+  its own, with its provenance kept.
 - **Close readings** of article-shaped pages: who acts, where, when the events
   happened (as distinct from publication), claims, quotes, intent.
 - **Reader comments**, extracted without an LLM.
@@ -52,13 +67,26 @@ JavaScript build, no Node, one SQLite database.
   model.
 - **Archival card**: ownership (RDAP/WHOIS), technology stack detected offline
   from the HTML, capture timeline, people, and a written summary.
+- **People**: spellings of one name are counted as one person. Case, accents
+  and hyphens are folded, and a surname joins the one full name it fits. Nicknames,
+  initials ("Tim BL") and names that fit several people are offered on the
+  People page for you to merge or keep separate. Your decisions apply
+  everywhere: results, card, themes, readings, export.
 
 **Output**
 - Search and browse results, research views (readings, chronology, links).
+- **Full-text search** of the pages' own text, not only the AI's descriptions,
+  with highlighted snippets. Accents are ignored ("cancion" finds "canción");
+  "phrases", OR, NOT and prefix* work.
+- **Page history**: every capture of a page on a timeline, marked unchanged or
+  +N/−M words, with a side-by-side diff of any two.
 - **Export as a BagIt bag** (RFC 8493, every file with its SHA-256): HTML pages
   for findings, pages by year, links, people, readings, chronology and
   methodology, the same data as CSV and JSON, the exact prompts used, and the
   raw captures.
+- **WARC export** (ISO 28500) of the held captures, with the analyses as
+  linked metadata records, for pywb, ReplayWeb.page and institutional
+  repositories.
 - JSON and CSV exports of the analysis.
 
 **Operations**
@@ -66,6 +94,10 @@ JavaScript build, no Node, one SQLite database.
   never resumes spending without a click.
 - Spending guards: a cap on model calls per run, or a stop at a fraction of
   the quota a hosted endpoint reports.
+- **Cost estimate before every AI run**: calls, input and output tokens, from
+  this project's past replies or the file sizes, and dollars when you set your
+  endpoint's prices.
+- **Optional password** (`DA_PASSWORD`).
 - **Logs page** with everything the app did and every failure, filterable by
   project and level. The API key is redacted before anything is written.
 
@@ -126,6 +158,10 @@ All settings are environment variables, listed with their defaults in
 | `LLM_MAX_CALLS_PER_RUN` | 0 (off) | Hard ceiling on calls per run |
 | `LLM_STOP_AT_SESSION_USAGE` | 0 (off) | Stop at this fraction of the endpoint's reported quota |
 | `DA_DATA_DIR` | `./data` | Database, downloads, logs, exports |
+| `DA_PASSWORD` | empty (off) | Require HTTP Basic auth for every page except `/api/health` |
+| `DA_USERNAME` | `archive` | User name that goes with `DA_PASSWORD` |
+| `LLM_PRICE_INPUT_PER_MTOK` | 0 | Your endpoint's price per million input tokens, for the estimates |
+| `LLM_PRICE_OUTPUT_PER_MTOK` | 0 | The same for output tokens; with both at 0 estimates show calls and tokens only |
 
 On concurrency: a stock local `ollama serve` answers one request at a time, so
 more workers only queue. Against ollama.com with `gemma4:31b`, 4 workers gave
@@ -144,7 +180,8 @@ A project's page walks through five steps:
 3. **Download.** About one request per second, as the Archive expects.
 4. **Analyze** with the chosen model. *Show failed & skipped* lists every page
    that did not make it and why. *Retry* requeues the failures.
-5. **Explore**: results, the archival card, research views, export.
+5. **Explore**: results (with full-text search, page history and the People
+   page), the archival card, research views, export.
 
 ![The archival card of the demo project: summary, ownership of the registered domain, and people named in the pages](docs/screenshots/card.png)
 
@@ -154,12 +191,15 @@ browser tab:
 ```bash
 docker exec -it digital-archeology python -m app.cli links-extract --project 1
 #   links-extract | links-recover | links-analyze | links-requeue | links-stats
+#   links-memento | img-memento                              (other archives, no LLM)
 #   read-select | read-run | read-requeue | read-stats       (close readings)
 #   comments                                                 (no LLM)
 #   img-select | img-recover | img-describe | img-requeue | img-stats
+#   estimate | search-index | warc [--all]
 ```
 
-Setting a scope window is deliberately a script rather than a button:
+The scope window is set on the Research page (section 1), where the takeover
+check proposes one. The script does the same from a shell:
 
 ```bash
 python3 scripts/set_scope.py --project 1                        # inspect
@@ -182,7 +222,19 @@ long job, because every file change restarts the server and stops the job.
 
 `backend/requirements.txt` pins every package to the versions the image is
 tested with. To upgrade, install from `backend/requirements.in`, test, and
-replace `requirements.txt` with the result of `pip freeze`.
+replace `requirements.txt` with the result of `pip freeze`. Dependabot proposes
+updates weekly.
+
+### Tests
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+They need no network and no model: the archives and the LLM are stubbed. CI
+runs them on every push, then builds the image and checks that it starts.
 
 ## Project layout
 
@@ -191,8 +243,10 @@ backend/app/
   main.py, config.py, database.py, models.py, cli.py
   routers/     web.py (UI), research.py, projects.py + export.py (JSON API)
   services/    wayback, downloader, processing + llm + llm_client (analysis),
-               links, reading, reception (comments), images, findings,
-               archive_export (BagIt), local_view, exclusions, applog,
+               links, linked_sites, memento (other archives), reading,
+               reception (comments), images, findings, people, takeover,
+               search_index (FTS5), history, estimate, archive_export (BagIt),
+               warc_export, local_view, exclusions, applog,
                enrichment (RDAP, timeline), techstack (fingerprints)
   templates/   Jinja2 pages and HTMX partials; export/ for the bag's pages
   static/      style.css, htmx.min.js
@@ -206,7 +260,8 @@ The JSON API is documented at http://localhost:8000/docs while the app runs.
 
 The Internet Archive is a nonprofit. The downloader is deliberately slow (one
 request per second, at most 40 per minute for linked material and images) and
-backs off when throttled. Please keep it that way. Material you recover belongs
+backs off when throttled. Please keep it that way. Other archives are asked
+at most one request per second, and each missing link only once. Material you recover belongs
 to its authors: cite the Wayback URL, which the export does for you.
 
 ## License

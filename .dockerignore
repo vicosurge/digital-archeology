@@ -29,3 +29,7 @@ backend/data
 .DS_Store
 Thumbs.db
 presentations
+backend/tests/
+backend/pytest.ini
+backend/requirements-dev.txt
+.github/

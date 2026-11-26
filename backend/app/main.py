@@ -1,12 +1,15 @@
 """Digital Archeology - FastAPI Application"""
+import base64
+import secrets
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 import os
 
 import logging
 
-from .config import get_data_dir, get_llm_config
+from .config import get_auth, get_data_dir, get_llm_config
 from .services import applog
 
 applog.setup("web")
@@ -55,6 +58,35 @@ app = FastAPI(
 # The UI is server-rendered and same-origin, so no CORS middleware is needed.
 # (The previous config paired allow_origins=["*"] with allow_credentials=True,
 # which browsers reject anyway; it existed for the since-removed Vue SPA.)
+
+# Optional password (DA_PASSWORD). HTTP Basic: the browser asks once and then
+# sends it with every request, HTMX's included, so no login page is needed.
+# The health check stays open for Docker's healthcheck.
+_OPEN_PATHS = {"/api/health"}
+
+
+def _authorized(header: str, user: str, password: str) -> bool:
+    if not header.lower().startswith("basic "):
+        return False
+    try:
+        given_user, _, given_pw = base64.b64decode(header[6:].strip()).decode("utf-8").partition(":")
+    except (ValueError, UnicodeDecodeError):
+        return False
+    ok_user = secrets.compare_digest(given_user.encode(), user.encode())
+    ok_pw = secrets.compare_digest(given_pw.encode(), password.encode())
+    return ok_user and ok_pw
+
+
+@app.middleware("http")
+async def require_password(request: Request, call_next):
+    creds = get_auth()
+    if creds is None or request.url.path in _OPEN_PATHS:
+        return await call_next(request)
+    if _authorized(request.headers.get("authorization", ""), *creds):
+        return await call_next(request)
+    return Response("Password required.", status_code=401,
+                    headers={"WWW-Authenticate": 'Basic realm="Digital Archeology", charset="UTF-8"'})
+
 
 # Static assets (htmx, css) for the server-rendered UI
 static_dir = os.path.join(os.path.dirname(__file__), "static")
