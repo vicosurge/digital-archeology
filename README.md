@@ -210,6 +210,8 @@ python3 scripts/set_scope.py --project 1 --clear
 
 ## Running without Docker
 
+Needs Python 3.12 or newer; the image and CI use 3.15.
+
 ```bash
 cd backend
 python3 -m venv .venv && . .venv/bin/activate
